@@ -166,8 +166,6 @@ Parameters:
 > In Wormhole, the recipientChain is a [uint16](https://github.com/wormhole-foundation/native-token-transfers/blob/main/evm/src/interfaces/INttManager.sol#L175). 
 > Keep `uint32` for now, but how to make this compatible with other interop protocols? 
 
-> TBD: Do we want the user to have an option to choose the cross-chain communication protocol? 
-
 Required Permissions:
 
 * The transaction signer must be the owner of the source token account
@@ -266,8 +264,6 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
         function getLatestCompletedCheckpoint() external view returns (uint64 checkpointId);
     }
   ```
-
-> TBD: Does `bridgeTo()` need the interopProtoID as an argument or it can figure it out from the destination chain? 
 
 #### Token Address Mapping
 

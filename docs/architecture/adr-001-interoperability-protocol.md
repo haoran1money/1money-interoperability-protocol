@@ -270,6 +270,7 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
 `OMInterop.sol` needs to keep a mapping of token addresses between the 1Money payment network and the sidechain. 
 This mapping is populated by the 1Money Network Operator that is responsible for deploying Customized Token Transfer 
 Contracts on the sidechain and to submit corresponding CreateNewToken instructions to the payment network. 
+The mapping should also contain information on the specific cross-chain token transfer protocol. 
 
 #### Track Missing BurnAndBridge Certificates
 
@@ -372,6 +373,13 @@ To enable the tracking of cross-chain transfer, there needs to be the following 
   be mapped to transaction hashes of `MintToForBridge` instructions on the payment network.
 
 > TODO where are these mappings stored? The mappings are needed by the 1Money transaction explorer. 
+
+## Consequences
+
+* The Permissioned Relayer guarantees the liveness of the interoperability protocol. 
+  This means that if the relayer is down, cross-chain transfers are unavailable. 
+  Also, if the relayer crashes, the recovery requires waiting for a checkpoint of the payment network. 
+  Thus, cross-chain transfers might be delayed until the checkpoint is completed.
 
 ## Invariants
 

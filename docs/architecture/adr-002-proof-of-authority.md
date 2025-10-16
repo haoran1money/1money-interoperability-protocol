@@ -58,7 +58,7 @@ At a minimum, `OMPoA.sol` should define the following events and external functi
 - `function addAndRemoveValidators` a utility function to avoid multiple calls to `addValidator` and `removeValidator`.
 
 `OMPoA.sol` stores a list of the current validators. This list is provided to the consensus engine (i.e., Malachite), 
-which uses it to update its validator set. Not that every validator in the set gets the same voting power. 
+which uses it to update its validator set. Note that every validator in the set gets the same voting power. 
 
 ### Permissioned Relayer
 

@@ -178,7 +178,8 @@ Notes:
 * Burning decreases the token's total supply
 * The bridging fee is escrowed in a special account owned by the Permissioned Relayer.
 * The `dstChainId` is specific to the cross-chain communication protocol and is public information 
-  (see [here](https://wormhole.com/docs/products/reference/chain-ids/) for Wormhole).
+  (see [here](https://wormhole.com/docs/products/reference/chain-ids/) for Wormhole
+  and [here](https://docs.layerzero.network/v2/deployments/deployed-contracts) for LayerZero).
 * For every account, there is an additional sequential nonce (i.e., `bbNonce`) 
   that is incremented only for BurnAndBridge instructions.
 
@@ -199,8 +200,9 @@ Parameters:
 
 Required Permissions:
 
-* The transaction signer must be the Permissioned Relayer. 
+* The transaction signer must be the Permissioned Relayer 
 * The refund address cannot be blacklisted
+* The fee address cannot be blacklisted
 
 ### 1Money Interop Contract
 
@@ -262,14 +264,21 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
         ) external;
 
         function getLatestCompletedCheckpoint() external view returns (uint64 checkpointId);
+
+        function mapTokenAddresses(
+            address omToken, // token address on payment network
+            address scToken, // token address on sidechain
+            uint8 interopProtoId, // cross-chain protocol identifier
+        ) external;
     }
   ```
 
 #### Token Address Mapping
 
 `OMInterop.sol` needs to keep a mapping of token addresses between the 1Money payment network and the sidechain. 
-This mapping is populated by the 1Money Network Operator that is responsible for deploying Customized Token Transfer 
-Contracts on the sidechain and to submit corresponding CreateNewToken instructions to the payment network. 
+This mapping is populated by the 1Money Network Operator by submitting `mapTokenAddresses` transactions. 
+The operator is responsible for deploying Customized Token Transfer Contracts on the sidechain 
+and for submitting corresponding `CreateNewToken` instructions to the payment network. 
 The mapping should also contain information on the specific cross-chain token transfer protocol. 
 
 #### Track Missing BurnAndBridge Certificates
@@ -323,8 +332,7 @@ Even in the case of a crash, the relayer cannot miss any events (as the nonce mu
 Thus, the relayer must be able to recover after a crash and query past events. 
 The relayer will use the following algorithm:
 
-* Query the payment network for the latest nonce `nonce` using the 
-  [get account nonce REST API](https://developer.1moneynetwork.com/integrations/rest-apis/accounts/get-account-nonce).
+* Use the `/v1/accounts/nonce` REST API to query the payment network for the latest nonce `nonce` for the relayer account.
 * Query the sidechain going backwards from the current height until retrieving all `OMInterop.sol` events with nonce 
   `>= nonce`. 
 * Submit all the corresponding instructions for the events starting with nonce `nonce+1`. 
@@ -385,6 +393,8 @@ To enable the tracking of cross-chain transfer, there needs to be the following 
 
 * Every successful `BurnAndBridge` on the payment network will eventually 
   result in a matching successful call to `bridgeTo()` on the sidechain. 
+* Every successful call to `bridgeTo()` on the sidechain will eventually
+  result in a matching certified `CollectFees` instruction on the payment network.
 * Every cross-chain token successfully received on the sidechain will eventually 
   result in a matching certified `MintToForBridge` instruction on the payment network. 
 

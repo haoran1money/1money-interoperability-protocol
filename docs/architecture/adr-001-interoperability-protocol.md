@@ -238,7 +238,7 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
             address omToken // The token address on the 1Money payment network
         )
         
-        // mintForBridge emits OMInteropReceived
+        // bridgeFrom emits OMInteropReceived
         function bridgeFrom(
             address to,
             uint256 amount

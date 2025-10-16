@@ -302,7 +302,7 @@ This entails sending transactions to both payment network and sidechain. Also, t
 to query events on both networks, including past events in case of crashes. 
 
 Note that the relayer is permissioned, which means it is trusted for both safety and liveness. 
-In future iterations, when the payment network and the sidechain will share a common state, then the protocol 
+In future iterations, when the payment network and the sidechain will share a common state, the protocol 
 should be adapted to work without a permissioned relayer.
 
 #### Submit Payment Network Transaction 

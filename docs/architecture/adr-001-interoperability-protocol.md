@@ -298,6 +298,16 @@ For this, `OMInterop.sol` keeps a mapping from 1Money user account to the latest
 Note that this is not the same as the account nonce (which is incremented for any instruction submitted by that account). 
 The call to `bridgeTo()` reverts if the `bbNonce` in the argument is not exactly the nonce in the mapping plus one.   
 
+#### Upgradability
+
+To enable modifications of the `OMInterop.sol` contract after deployment, 
+the [UUPS](https://docs.openzeppelin.com/contracts-stylus/uups-proxy) pattern should be used.
+UUPS allows for upgradeable smart contracts by separating the contract's state 
+(held in a proxy contract) from its logic (in an implementation contract). 
+For security, upgrades must be restricted to trusted accounts, such as the 1Money Network Operator.
+
+> TODO: decide on storage layout
+
 ### Permissioned Relayer 
 
 The Permissioned Relayer connects the 1Money Interop Module with the 1Money Interop Contract. 
@@ -400,3 +410,4 @@ To enable the tracking of cross-chain transfer, there needs to be the following 
 * [Reth](https://github.com/paradigmxyz/reth)
 * [LayerZero OFT.sol](https://github.com/LayerZero-Labs/LayerZero-v2/blob/main/packages/layerzero-v2/evm/oapp/contracts/oft/OFT.sol)
 * [Wormhole NttManager.sol](https://github.com/wormhole-foundation/native-token-transfers/blob/main/evm/src/NttManager/NttManager.sol)
+* [UUPS](https://docs.openzeppelin.com/contracts-stylus/uups-proxy)

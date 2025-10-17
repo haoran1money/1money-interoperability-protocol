@@ -175,6 +175,8 @@ Required Permissions:
 Notes:
 
 * Transfers fail if the sender has insufficient balance
+* The `amount` indicates the total amount including the payment network fees (i.e., `fee`) and the `escrowFee`.
+  The amount burned and bridged to the destination chain is `amount - fee - escrowFee`.
 * Burning decreases the token's total supply
 * The bridging fee is escrowed in a special account owned by the Permissioned Relayer.
 * The `dstChainId` is specific to the cross-chain communication protocol and is public information 
@@ -182,10 +184,6 @@ Notes:
   and [here](https://docs.layerzero.network/v2/deployments/deployed-contracts) for LayerZero).
 * For every account, there is an additional sequential nonce (i.e., `bbNonce`) 
   that is incremented only for BurnAndBridge instructions.
-
-> TBD: In the [Transfer](https://developer.1moneynetwork.com/core-concepts/transactions-and-instructions#transfer) 
-> instruction, is the amount the amount received by the recipient or sent by the sender?
-> In other words, is the payment fee part of the amount?
 
 #### CollectFees
 

@@ -159,12 +159,8 @@ Parameters:
 
 * `amount: U256` -- The amount of tokens to burn and bridge
 * `address: Address` -- The recipient's wallet address
-* `dstChainId: U32` -- The destination chain ID
+* `dstChainId: U256` -- The destination chain ID
 * `escrowFee: U256` -- The bridging fee necessary to escrow for transferring the tokens to the destination chain
-
-> TBD: In LayerZero, a destination endpoint ID is a [uint32](https://github.com/LayerZero-Labs/LayerZero-v2/blob/200cda254120375f40ed0a7e89931afb897b8891/packages/layerzero-v2/evm/oapp/contracts/oft/interfaces/IOFT.sol#L11). 
-> In Wormhole, the recipientChain is a [uint16](https://github.com/wormhole-foundation/native-token-transfers/blob/main/evm/src/interfaces/INttManager.sol#L175). 
-> Keep `uint32` for now, but how to make this compatible with other interop protocols? 
 
 Required Permissions:
 

@@ -68,7 +68,7 @@ Cross-chain communication protocols deploy their logic in the form of EVM smart 
 <details>
 <summary>High level design of external payments (i.e., cross-chain payments).</summary>
 
-**External Incoming Payments.** The following diagram describes the high-level design of an external incoming payment, e.g., a user sending 100 USDT from 
+**External Incoming Payments (deposits).** The following diagram describes the high-level design of an external incoming payment, e.g., a user sending 100 USDT from 
 Ethereum to the 1Money Network. Here is the step by step flow:
 
 * The user logs in on the 1Money frontend with Metamask wallet (or other EVM-based wallet). 
@@ -84,7 +84,7 @@ Ethereum to the 1Money Network. Here is the step by step flow:
 
 ![External Incoming Payments](./figures/adr-001-external-incoming-payments.png)
 
-**External Outgoing Payments.** The following diagram describes the high-level design of an external outgoing payment, e.g., a user sending 100 USDT from 
+**External Outgoing Payments (withdrawals).** The following diagram describes the high-level design of an external outgoing payment, e.g., a user sending 100 USDT from 
 the 1Money Network to Ethereum. Here is the step by step flow:
 
 * The user logs in on 1Money frontend with Metamask wallet (or other EVM-based wallet). 
@@ -146,9 +146,6 @@ Notes:
 * To ensure subsequent nonces, the nonce is determined by the sidechain. 
 * Before a cross-chain token can be minted, it first needs to be created via the `CreateNewToken` instruction. The 
   `master_authority` is set to the Permissioned Relayer.
-
-> TBD: Is thea solution based on a permissioned relayer acceptable? Should the `master_authority` be someone else and 
-> make the relayer a `mint_burn_authority`? 
 
 #### BurnAndBridge
 
@@ -374,6 +371,57 @@ An instance of the extended `OFT.sol` contract (i.e., `OM-OFT.sol`) will be depl
 In the case of Wormhole, the [NttManager.sol](https://github.com/wormhole-foundation/native-token-transfers/blob/main/evm/src/NttManager/NttManager.sol)
 contract needs to be extended. Specifically, the `_handleMsg` needs to be overridden to remove any mint (unlock) and burn (lock) logic. 
 Similarly to LayerZero, the mint calls should be replaced by a call to the `bridgeFrom()` function of the `OMInterop.sol` contract.
+
+### Rate Limiting
+
+For safety reasons, external payments (both deposits and withdrawals) need to be rate limited. 
+
+#### Deposits
+
+To avoid scenarios where assets are transferred to the 1Money network, but never minted to the destination account, 
+deposits must be rate limited on the sidechain. As a result, if the limit is exceeded for a cross-chain transfer, 
+then the `bridgeFrom()` call reverts, which means the transfer reverts. 
+This requires implementing the following rate limiting algorithm in the `OMInterop.sol` contract. 
+For every cross-chain token `TOK`: 
+
+* Define a rate limit time window (i.e., `RLTW`) and a max threshold (i.e., `allowance`).
+* Let `receivedAmount` be the amount of `TOK` received during the current `RLTW`. Initialize `receivedAmount` to zero.
+* When receiving `x` amount of `TOK`, if `receivedAmount + x > allowance`, revert `bridgeFrom()`. Otherwise, `receivedAmount += x`.
+* Every `RLTW`, reset `receivedAmount` to zero.
+
+Both `RLTW` and `allowance` can be updated by an admin, such as the 1Money Network Operator.
+When this happens, `receivedAmount` is reset to zero.
+
+Note that the values of `RLTW` and `allowance` should be set such that it provides safety 
+(i.e., mitigates the risks of an attack), but it doesn't affect the UX by limiting valid user deposits. 
+
+#### Withdrawals
+
+To avoid scenarios where assets are burned on the 1Money network, but never transferred to the destination chain, 
+withdrawals must be rate limited on the payment network. As a result, if the limit is exceeded for a cross-chain transfer,
+then the `BurnAndBridge` instruction fails, which means the transfer fails. 
+This requires implementing the following rate limiting algorithm in the Interop Module.
+For every cross-chain token `TOK`: 
+
+* Define a rate limit time window (i.e., `RLTW`) and a max threshold (i.e., `allowance`).
+* Let `burnedAmount` be the amount of `TOK` burned (and transferred out) during the current `RLTW`. 
+  Initialize `burnedAmount` to zero. 
+  Note that `burnedAmount` is local to every 1Money validator -- it represents the amount of `TOK` 
+  the validator agreed to burn by signing `BurnAndBridge` instructions.
+* When a validator receives a `BurnAndBridge` instruction with `amount = x` 
+  (i.e., request to withdraw `x` amount of `TOK`), 
+  if `burnedAmount + x > allowance`, then it considers the `BurnAndBridge` instruction as invalid. 
+  Otherwise, if the rest of the validation is successful, it signs the `BurnAndBridge` instruction and `burnedAmount += x`.
+* Every `RLTW`, every validator resets its own `burnedAmount` to zero.
+  
+Both `RLTW` and `allowance` can be updated by an admin, such as the 1Money Network Operator (via governance proposals).
+When this happens, `burnedAmount` is reset to zero for all validators.
+
+Note that the values of `RLTW` and `allowance` should be set such that it provides safety 
+(i.e., mitigates the risks of an attack), but it doesn't affect the UX by limiting valid user withdrawals. 
+Also, note that although every validator allows up to `allowance` "burns" per `RLTW`, 
+since validators might use their allowances for different `BurnAndBridge` instructions, it is possible that 
+this rate limiting algorithm imposes a stricter limit on withdrawals. 
 
 ### Matching Transaction Hashes
 

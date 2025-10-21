@@ -25,15 +25,18 @@ sidechain, that supports integration with cross-chain communication protocols. W
 In addition, this ADR is proposing the design of the interoperability protocol that enables the communication 
 between the payment lane and the EVM lane. 
 
-> TODO: add more context 
->
-> * payments, quorums, certificates
-> * requirements: fees in the transferred token, Metamask integrations, 
-> * governance, membership 
-> * cross-chain communication protocols, LayerZero 
+The fast payment lane allows network validators to quickly finalize user transactions, 
+provided that each account submits transactions with strictly increasing, consecutive nonces.
+A transaction is considered finalized once it receives signatures from at least a quorum of validators.
+The signatures from at least a quorum are also known as a certificate. 
+Thus, a finalized transaction is also referred to as a _certified transaction_.
+Note that validators can see certified transactions from different users in different order. 
+Total order requires consensus. The 1Money Network uses a checkpointing protocol to implement consensus.
 
-The following diagram describes the high-level design of the 1Money internal payments, e.g., a user sending 100 USDT 
-to another user using the payment network, with only 99.9 USDT being transferred and 0.1 USDT kept as fee. 
+On of the main requirements is for users to pay fees in the transferred token, 
+e.g., if a user send a payment of 100 USDT and the fee is 0.1 USDT, 
+then only 99.9 USDT being transferred and 0.1 USDT kept as fee. 
+The following diagram describes the high-level design of the 1Money internal payments. 
 
 ![Internal Payments](./figures/adr-001-internal-payments.png)
 

@@ -445,10 +445,16 @@ To enable the tracking of cross-chain transfer, there needs to be the following 
 
 * Every successful `BurnAndBridge` on the payment network will eventually 
   result in a matching successful call to `bridgeTo()` on the sidechain. 
+  * This entails the following invariant: 
+    Calls to `bridgeTo()` from the Permissioned Relayer cannot revert.
 * Every successful call to `bridgeTo()` on the sidechain will eventually
   result in a matching certified `CollectFees` instruction on the payment network.
+  * This entails the following invariant:
+    `CollectFees` instructions sent by the Permissioned Relayer cannot fail.
 * Every cross-chain token successfully received on the sidechain will eventually 
   result in a matching certified `MintToForBridge` instruction on the payment network. 
+  * This entails the following invariant:
+    `MintToForBridge` instructions sent by the Permissioned Relayer cannot fail.
 
 > TODO add more invariants
 

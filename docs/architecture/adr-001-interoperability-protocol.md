@@ -439,7 +439,43 @@ To enable the tracking of cross-chain transfer, there needs to be the following 
 * Transaction hashes of sidechain transactions that result in calls to `bridgeFrom()` must 
   be mapped to transaction hashes of `MintToForBridge` instructions on the payment network.
 
-> TODO where are these mappings stored? The mappings are needed by the 1Money transaction explorer. 
+Note that reverse indexes might also be needed, i.e., mappings from `bridgeTo` to `BurnAndBridge` and from `MintToForBridge` to `bridgeFrom()`.
+
+The mapping for transaction hash mapping should be stored in its own contract and updated by the Permissioned Relayer.
+
+Note that filtering incomplete mapping in the Map<Hash, Hash> might need custom implementation in order to reduce the cost.
+
+#### Withdrawals Hash Mapping
+
+1. `BurnAndBridge` instruction is successful
+2. The relayer retrieves the transaction hash and partially updates the hash mapping `Map<BurnTx, 0x0>`
+3. The relayer sends a `bridgeTo` transaction to the Sidechain
+4. The relayer retrieves the transaction hash of the `bridgeTo` transaction and fully updates the mapping `Map<BurnTx, BridgeTx>`
+
+If the relayer crashes before step 4. there is no issues as the withdrawal is incomplete and the recovery mechanism will be able to correctly update the mapping.  
+If the relayer crashes at step 4. the mapping needs to be updated when the relayer restarts. This can be done by having the relayer:
+
+1. Query all the incomplete mappings, `Map<Hash, 0x0>`
+2. Query the `BurnAndBridge` transaction using the `Hash` and retrieve the `account` and `bbNonce`
+3. Query the Sidechain `bridgeTo` using the `account` and `bbNonce`
+    * If the hash does **not** exist the mapping will be done by the recovery mechanism
+4. Update the mapping
+
+#### Deposits Hash Mapping
+
+1. `bridgeFrom` transaction is successful
+2. The relayer retrieves the transaction hash and partially updates the hash mapping `Map<BridgeTx, 0x0>`
+3. The relayer sends a `MintToForBridge` instruction to the payment network
+4. The relayer retrieves the transaction hash of the `MintToForBridge` transaction and fully updates the mapping `Map<BridgeTx, MintTx>`
+
+If the relayer crashes before step 4. there is no issues as the withdrawal is incomplete and the recovery mechanism will be able to correctly update the mapping.  
+If the relayer crashes at step 4. the mapping needs to be updated when the relayer restarts. This can be done by having the relayer:
+
+1. Query all the incomplete mappings, `Map<Hash, 0x0>`
+2. Query the `bridgeFrom` transaction using the `Hash` and retrieve the `account` and `nonce`
+3. Query the payment network `MintToForBridge` using the `account` and `nonce`
+    * If the hash does **not** exist the mapping will be done by the recovery mechanism
+4. Update the mapping
 
 ## Consequences
 

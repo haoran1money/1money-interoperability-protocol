@@ -306,7 +306,11 @@ UUPS allows for upgradeable smart contracts by separating the contract's state
 (held in a proxy contract) from its logic (in an implementation contract). 
 For security, upgrades must be restricted to trusted accounts, such as the 1Money Network Operator.
 
-> TODO: decide on storage layout
+To avoid storage layout errors when upgrading the `OMInterop.sol` contract, 
+[ERC-7201](https://eips.ethereum.org/EIPS/eip-7201) should be used. 
+All storage variables of `OMInterop.sol` -- token address mapping, 
+checkpoint mapping, `bbNonce` mapping, and rate limiting data -- should be places into one struct 
+annotated with `@custom:storage-location erc7201:<NAMESPACE_ID>`.  
 
 ### Permissioned Relayer 
 

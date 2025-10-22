@@ -139,8 +139,7 @@ Required Permissions:
 
 * The transaction signer must be the Permissioned Relayer. 
 * The token must not be paused.
-
-> TBD: Can the recipient be blacklisted? 
+* The recipient cannot be blacklisted
   
 Notes:
 
@@ -498,8 +497,6 @@ If the relayer crashes at step 4. the mapping needs to be updated when the relay
   result in a matching certified `MintToForBridge` instruction on the payment network. 
   * This entails the following invariant:
     `MintToForBridge` instructions sent by the Permissioned Relayer cannot fail.
-
-> TODO add more invariants
 
 ## References
 

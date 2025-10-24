@@ -124,7 +124,7 @@ The components in red are dependencies, while the ones in orange are within the 
 
 ### Interop Module
 
-The Interop Module introduces three new instructions to the payment network: `MintToForBridge`, `BurnAndBridge`, and `CollectFees`
+The Interop Module introduces two new instructions to the payment network: `MintToForBridge` and `BurnAndBridge`
 
 #### MintToForBridge
 
@@ -173,29 +173,12 @@ Notes:
 * The `amount` indicates the total amount including the payment network fees (i.e., `fee`) and the `escrowFee`.
   The amount burned and bridged to the destination chain is `amount - fee - escrowFee`.
 * Burning decreases the token's total supply
-* The bridging fee is escrowed in a special account owned by the Permissioned Relayer.
+* The `escrowFee` is transferred to the Permissioned Relayer account. 
 * The `dstChainId` is specific to the cross-chain communication protocol and is public information 
   (see [here](https://wormhole.com/docs/products/reference/chain-ids/) for Wormhole
   and [here](https://docs.layerzero.network/v2/deployments/deployed-contracts) for LayerZero).
 * For every account, there is an additional sequential nonce (i.e., `bbNonce`) 
   that is incremented only for BurnAndBridge instructions.
-
-#### CollectFees
-
-Transfer fees for cross-chain transfers from the special escrow account. 
-
-Parameters:
-
-* `fee: U256` -- The actual amount paid by the relayer in fees for a cross-chain transfer
-* `feeAddress: Address` -- The recipient's wallet address for the fee amount
-* `refund: U256` -- The amount to be refunded to the user (i.e., `escrowFee - fee`)
-* `refundAddress: Address` -- The recipient's wallet address for the refund amount
-
-Required Permissions:
-
-* The transaction signer must be the Permissioned Relayer 
-* The refund address cannot be blacklisted
-* The fee address cannot be blacklisted
 
 ### 1Money Interop Contract
 
@@ -218,16 +201,15 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
     interface IOMInterop {
         // Events
         event OMInteropReceived(
-            uint64 nonce, // Nonce used by the relayer to submit a payment
+            uint64 nonce, // Nonce used by the relayer to submit the matching MintToForBridge instruction
             address to, // Destination account
             uint256 amount, // Amount of tokens to mint
             address omToken // The token address on the 1Money payment network
         );
         event OMInteropSent(
-            uint64 nonce, // Nonce used by the relayer to submit a payment
+            uint64 nonce, // Nonce used by the relayer to submit the matching Transfer instruction
             address from, // Source account (needed to refund the unused fee)
-            uint256 feeAmount, // Amount of tokens to transfer to the relayer
-            uint256 refundAmount, // Amount of tokens to refund the user (refundAmount = escrowFee - feeAmount)
+            uint256 refundAmount, // Amount of tokens to refund the user
             address omToken // The token address on the 1Money payment network
         )
         
@@ -321,12 +303,25 @@ Note that the relayer is permissioned, which means it is trusted for both safety
 In future iterations, when the payment network and the sidechain will share a common state, the protocol 
 should be adapted to work without a permissioned relayer.
 
+#### Refund Users
+
+When submitting `BurnAndBridge` instructions, users need to cover the fee for the cross-chain transfer. 
+Normally, this fee can be estimated by querying the cross-chain protocol contracts, but the estimate might be off. 
+To avoid scenarios where the fee is under-estimated and the relayer needs to cover the cost, 
+the `BurnAndBridge` instruction overestimates the cross-chain transfer fee (see `escrowFee`). 
+This fee is transferred to the relayer account. 
+Once the matching `bridgeTo` transaction completes successfully (i.e., `OMInteropSent` is emitted),
+the relayer uses the `from` and `refundAmount` from the emitted `OMInteropSent` event to refund the user the unused fee.
+The relayer does this through a regular `Transfer` instruction.
+
 #### Submit Payment Network Transaction 
 
-The relayer must submit both `MintToForBridge` and `CollectFees` instructions to the payment network. 
+The relayer must submit both `MintToForBridge` and `Transfer` instructions to the payment network. 
 As the relayer must sign both of these instructions, it must use a nonce that is strictly increasing without gaps. 
 To ensure that no nonces are missed even if the relayer crashes, the 1Money Interop Contract maintains the nonce 
 in its state and increments it for every event emitted (either `OMInteropReceived` or `OMInteropSent`).
+Note that when emitting `OMInteropSent`, if `refundAmount` is zero, then the `nonce` is not incremented 
+as the Permissioned Relayer doesn't need to refund the user via a `Transfer` instruction.
 
 Given that the relayer is permissioned, it doesn't need to pay fees to submit transactions to the payment network. 
 
@@ -446,19 +441,32 @@ Note that filtering incomplete mapping in the Map<Hash, Hash> might need custom 
 
 #### Withdrawals Hash Mapping
 
+For withdrawals 2 transaction hash mappings are needed, one for the withdrawals and one for refunds.
+
 1. `BurnAndBridge` instruction is successful
-2. The relayer retrieves the transaction hash and partially updates the hash mapping `Map<BurnTx, 0x0>`
+2. The relayer retrieves the transaction hash and partially updates the withdrawal mapping `Map<BurnTx, 0x0>` and the refund mapping `Map<BurnTx, 0x0>`
 3. The relayer sends a `bridgeTo` transaction to the Sidechain
-4. The relayer retrieves the transaction hash of the `bridgeTo` transaction and fully updates the mapping `Map<BurnTx, BridgeTx>`
+4. The relayer retrieves the transaction hash of the `bridgeTo` transaction and fully updates the withdrawal mapping `Map<BurnTx, BridgeTx>`
+5. The relayer refunds the user with a `Transfer` instruction
+6. The relayer retrieves the `Transfer` instruction hash and update the refund mapping `Map<BurnTx, RefundTx>`
 
-If the relayer crashes before step 4. there is no issues as the withdrawal is incomplete and the recovery mechanism will be able to correctly update the mapping.  
-If the relayer crashes at step 4. the mapping needs to be updated when the relayer restarts. This can be done by having the relayer:
+If the relayer crashes before step 3. there is no issues as the withdrawal is incomplete and the recovery mechanism will be able to correctly update the mappings.  
+If the relayer crashes at step 3. or 4. the mappings need to be updated when the relayer restarts. This can be done by having the relayer:
 
-1. Query all the incomplete mappings, `Map<Hash, 0x0>`
+1. Query all the incomplete withdrawal mappings
 2. Query the `BurnAndBridge` transaction using the `Hash` and retrieve the `account` and `bbNonce`
 3. Query the Sidechain `bridgeTo` using the `account` and `bbNonce`
     * If the hash does **not** exist the mapping will be done by the recovery mechanism
-4. Update the mapping
+4. Update the withdrawal mapping
+
+Note that the refund will be handled by the recovery mechanism.
+
+If the relayer crashes at step 5. or 6. the refund mapping needs to be updated when the relayer restarts. This can be done by having the relayer:
+1. Query all the incomplete refund mappings, `Map<Hash, 0x0>`
+2. Use the transfer mapping to retrieve the `bridgeTo` hash and use it to retrieve the `nonce`
+3. Query the `Transfer` transaction using the `relayer_account` and `nonce`
+    * If the hash does **not** exist the mapping will be done by the recovery mechanism
+4. Update the refund mapping
 
 #### Deposits Hash Mapping
 
@@ -489,10 +497,8 @@ If the relayer crashes at step 4. the mapping needs to be updated when the relay
   result in a matching successful call to `bridgeTo()` on the sidechain. 
   * This entails the following invariant: 
     Calls to `bridgeTo()` from the Permissioned Relayer cannot revert.
-* Every successful call to `bridgeTo()` on the sidechain will eventually
-  result in a matching certified `CollectFees` instruction on the payment network.
-  * This entails the following invariant:
-    `CollectFees` instructions sent by the Permissioned Relayer cannot fail.
+* Every emission of `OMInteropSent` on the sidechain, with `refundAmount > 0`, will eventually
+  result in a matching certified `Transfer` instruction (on the payment network) that refunds the user.
 * Every cross-chain token successfully received on the sidechain will eventually 
   result in a matching certified `MintToForBridge` instruction on the payment network. 
   * This entails the following invariant:

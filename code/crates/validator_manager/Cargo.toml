@@ -1,0 +1,15 @@
+[package]
+name         = "validator_manager"
+edition      = { workspace = true }
+version      = { workspace = true }
+license      = { workspace = true }
+authors      = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+alloy-contract   = { workspace = true }
+alloy-sol-types  = { workspace = true }
+alloy-primitives = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,37 @@
+[package]
+name    = "relayer"
+version = { workspace = true }
+edition = { workspace = true }
+
+[dependencies]
+url                = { workspace = true }
+clap               = { workspace = true, features = [ "derive", "env" ] }
+color-eyre         = { workspace = true }
+serde              = { workspace = true, features = [ "derive" ] }
+reqwest            = { workspace = true, features = [ "json", "rustls-tls" ] }
+futures            = { workspace = true }
+async-stream       = { workspace = true }
+thiserror          = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+hex                = { workspace = true }
+humantime          = { workspace = true }
+
+alloy-provider     = { workspace = true }
+alloy-sol-types    = { workspace = true, features = [ "json" ] }
+alloy-contract     = { workspace = true }
+alloy-signer       = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-primitives   = { workspace = true, features = [ "serde" ] }
+tokio              = { workspace = true, features = [ "full" ] }
+
+onemoney-protocol = { workspace = true }
+
+validator_manager = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+httpmock   = { workspace = true }
+
+[lints]
+workspace = true

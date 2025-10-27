@@ -1,0 +1,38 @@
+name: Format
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') && github.ref != 'refs/heads/main' }}
+
+jobs:
+  taplo:
+    name: Taplo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: uncenter/setup-taplo@v1
+      - name: Run taplo
+        run: taplo fmt --check
+        working-directory: ./code
+
+  yaml-fmt:
+    name: YAML Formatter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: denoland/setup-deno@v2
+      - name: Run deno fmt
+        run: deno fmt --check .github/**/*.yaml .github/**/*.yml
+
+  typos:
+    name: Spell Check with Typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: crate-ci/typos@v1

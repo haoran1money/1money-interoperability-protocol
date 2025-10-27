@@ -1,0 +1,12 @@
+use alloy_signer_local::PrivateKeySigner;
+use url::Url;
+
+#[derive(clap::Args, Clone)]
+pub struct Config {
+    #[arg(long, env = "OM_NODE_URL", default_value = "http://127.0.0.1:18555")]
+    pub one_money_node_url: Url,
+    #[arg(long, env = "SC_NODE_URL", default_value = "http://127.0.0.1:8545")]
+    pub side_chain_node_url: Url,
+    #[arg(long, env = "RELAYER_PRIVATE_KEY")]
+    pub relayer_private_key: PrivateKeySigner,
+}

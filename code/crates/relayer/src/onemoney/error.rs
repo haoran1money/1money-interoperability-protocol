@@ -9,4 +9,8 @@ pub enum Error {
     Http(#[from] reqwest::Error),
     #[error("Validator {address:?} has an invalid consensus public key")]
     InvalidValidatorKey { address: Address },
+    #[error("Failed to query 1Money: {0}")]
+    FailedQuery(#[from] onemoney_protocol::Error),
+    #[error("Failed: {0}")]
+    Generic(String),
 }

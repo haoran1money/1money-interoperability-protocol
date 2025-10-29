@@ -7,9 +7,10 @@ use reqwest::Client;
 use tokio::time::interval;
 
 use crate::onemoney::error::Error;
-use crate::onemoney::types::{Epoch, RawEpoch};
+use crate::onemoney::types::epoch::{Epoch, RawEpoch};
 
 pub mod error;
+pub mod transaction;
 pub mod types;
 
 #[cfg(test)]

@@ -1,15 +1,25 @@
 use core::time::Duration;
 
-use alloy_primitives::address;
-use alloy_signer::k256::ecdsa::SigningKey;
+use alloy_primitives::Address;
+use alloy_signer::k256::ecdsa::VerifyingKey;
+use alloy_signer::utils::public_key_to_address;
 use futures::TryStreamExt;
 use httpmock::prelude::*;
 use serde_json::json;
 use url::Url;
 
 use crate::onemoney::epoch_stream;
+use crate::onemoney::tests::utils::consensus_key;
 
-fn build_epoch_response(epoch_id: u64, consensus_key: &str, addr_hex: &str) -> serde_json::Value {
+fn build_epoch_response(
+    epoch_id: u64,
+    consensus_key: &VerifyingKey,
+    operator_address: Address,
+) -> serde_json::Value {
+    let consensus_key_hex = format!(
+        "0x{}",
+        hex::encode(consensus_key.to_encoded_point(true).as_bytes())
+    );
     json!({
         "epoch_id": epoch_id,
         "hash": format!("0x{:064x}", epoch_id),
@@ -19,12 +29,12 @@ fn build_epoch_response(epoch_id: u64, consensus_key: &str, addr_hex: &str) -> s
                     "message": {
                         "epoch": { "epoch_id": epoch_id },
                         "chain": 1,
-                        "operator_public_key": consensus_key,
-                        "operator_address": addr_hex,
+                        "operator_public_key": consensus_key_hex,
+                        "operator_address": operator_address,
                         "validator_set": {
                             "members": [{
-                                "consensus_public_key": consensus_key,
-                                "address": addr_hex,
+                                "consensus_public_key": consensus_key_hex,
+                                "address": operator_address,
                                 "peer_id": format!("peer-{epoch_id}"),
                                 "archive": false
                             }]
@@ -36,26 +46,13 @@ fn build_epoch_response(epoch_id: u64, consensus_key: &str, addr_hex: &str) -> s
     })
 }
 
-fn consensus_key_hex() -> String {
-    let signing_key = SigningKey::from_bytes(&alloy_signer::k256::Scalar::from(7u64).to_bytes())
-        .expect("valid key");
-    let verifying_key = *signing_key.verifying_key();
-    format!(
-        "0x{}",
-        hex::encode(verifying_key.to_encoded_point(false).as_bytes())
-    )
-}
-
 #[tokio::test]
 async fn test_epoch_stream_emits_epoch_from_mock() {
-    let consensus_key = consensus_key_hex();
-    let validator_addr = format!(
-        "{:#x}",
-        address!("0x0000000000000000000000000000000000000007")
-    );
+    let consensus_key = consensus_key();
+    let operator_address = public_key_to_address(&consensus_key);
 
     let server = MockServer::start_async().await;
-    let response_body = build_epoch_response(1, &consensus_key, &validator_addr);
+    let response_body = build_epoch_response(1, &consensus_key, operator_address);
     let mock = server
         .mock_async(|when, then| {
             when.method(GET).path("/v1/governances/epoch");
@@ -81,11 +78,8 @@ async fn test_epoch_stream_emits_epoch_from_mock() {
 
 #[tokio::test]
 async fn test_epoch_stream_recovers_after_bad_payload() {
-    let consensus_key = consensus_key_hex();
-    let validator_addr = format!(
-        "{:#x}",
-        address!("0x0000000000000000000000000000000000000007")
-    );
+    let consensus_key = consensus_key();
+    let operator_address = public_key_to_address(&consensus_key);
 
     let server = MockServer::start_async().await;
 
@@ -118,7 +112,7 @@ async fn test_epoch_stream_recovers_after_bad_payload() {
             when.method(GET).path("/v1/governances/epoch");
             then.status(200)
                 .header("content-type", "application/json")
-                .json_body(build_epoch_response(1, &consensus_key, &validator_addr));
+                .json_body(build_epoch_response(1, &consensus_key, operator_address));
         })
         .await;
 

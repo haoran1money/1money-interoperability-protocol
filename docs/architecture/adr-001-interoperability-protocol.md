@@ -268,7 +268,7 @@ The `OMInterop.sol` contract keeps a mapping from checkpoint ID to a tuple `(cer
   Thus, `completed` is updated by `bridgeTo()`.
 
 To prune the checkpoint map, all the entries with `certified = completed` can be pruned, 
-except the one with the highest checkpoint ID. This entry needed by the `getLatestCompletedCheckpoint()` function. 
+except the one with the highest checkpoint ID. This entry is needed by the `getLatestCompletedCheckpoint()` function, which reverts if no checkpoint has completed yet.
 
 #### BridgeTo Anti-Replay Mechanism 
 
@@ -352,8 +352,8 @@ Even in the case of a crash, the relayer cannot miss any certified `BurnAndBridg
 Thus, the relayer must be able to recover after a crash and query missing certified `BurnAndBridge`.
 The relayer will use the following algorithm:
 
-* Get the latest completed `checkpointId` by calling the `getLatestCompletedCheckpoint` function of the `OMInterop.sol` contract.
-* Get all the certified `BurnAndBridge` instructions starting with `checkpointId+1` and submit a matching `bridgeTo`
+* Attempt to read the latest completed `checkpointId` by calling the `getLatestCompletedCheckpoint` function of the `OMInterop.sol` contract, which reverts if no checkpoint has completed yet.
+* Get all the certified `BurnAndBridge` instructions starting with `checkpointId + 1` and submit a matching `bridgeTo`
   transaction to the sidechain. Note that some of these certified `BurnAndBridge` instructions are already completed 
   (i.e., a matching `bridgeTo` transaction was already sent before the relayer crashed). These duplicate transactions 
   will be dropped due to the anti-replay mechanism.  

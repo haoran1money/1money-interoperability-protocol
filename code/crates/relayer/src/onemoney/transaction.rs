@@ -12,11 +12,10 @@ pub async fn get_transactions_from_checkpoint<FilterFn>(
 where
     FilterFn: Fn(&Transaction) -> bool,
 {
-    let client = Client::custom(url).unwrap();
+    let client = Client::custom(url)?;
     let checkpoint = client
         .get_checkpoint_by_number(checkpoint_number, true)
-        .await
-        .map_err(Error::FailedQuery)?;
+        .await?;
 
     match checkpoint
         .transactions {

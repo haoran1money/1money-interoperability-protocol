@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members  = [ "crates/relayer", "crates/validator_manager" ]
+members  = [ "crates/relayer", "crates/validator_manager", "crates/onemoney_interop" ]
 
 [workspace.package]
 version      = "0.0.0"
@@ -27,14 +27,18 @@ httpmock           = { version = "0.8" }
 serde_json         = { version = "1" }
 humantime          = { version = "2" }
 
-alloy-provider     = { version = "1" }
-alloy-primitives   = { version = "1" }
-alloy-signer-local = { version = "1" }
-alloy-sol-types    = { version = "1" }
-alloy-contract     = { version = "1" }
-alloy-signer       = { version = "1" }
-alloy-sol-macro    = { version = "1" }
-alloy-rpc-types    = { version = "1" }
+alloy-provider       = { version = "1" }
+alloy-primitives     = { version = "1" }
+alloy-signer-local   = { version = "1" }
+alloy-sol-types      = { version = "1" }
+alloy-contract       = { version = "1" }
+alloy-signer         = { version = "1" }
+alloy-sol-macro      = { version = "1" }
+alloy-rpc-types      = { version = "1" }
+alloy-rpc-types-eth  = { version = "1" }
+alloy-transport      = { version = "1" }
+alloy-node-bindings  = { version = "1" }
+alloy-transport-http = { version = "1" }
 
 onemoney-protocol = { version = "0.6.0" }
 

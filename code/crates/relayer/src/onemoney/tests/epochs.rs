@@ -77,7 +77,7 @@ async fn test_epoch_stream_emits_epoch_from_mock() {
 }
 
 #[tokio::test]
-async fn test_epoch_stream_recovers_after_bad_payload() {
+async fn test_epoch_stream_stops_after_bad_payload() {
     let consensus_key = consensus_key();
     let operator_address = public_key_to_address(&consensus_key);
 
@@ -107,7 +107,7 @@ async fn test_epoch_stream_recovers_after_bad_payload() {
     error_mock.assert_async().await;
 
     server.reset_async().await;
-    let success_mock = server
+    let mock = server
         .mock_async(|when, then| {
             when.method(GET).path("/v1/governances/epoch");
             then.status(200)
@@ -118,9 +118,12 @@ async fn test_epoch_stream_recovers_after_bad_payload() {
 
     let result = tokio::time::timeout(Duration::from_secs(2), stream.try_next())
         .await
-        .expect("timed out waiting for epoch")
-        .expect("stream returned error instead of epoch")
-        .expect("no epoch emitted");
-    assert_eq!(result.epoch_id, 1);
-    success_mock.assert_async().await;
+        .expect("timed out waiting for stream completion");
+
+    assert!(
+        result.expect("stream yielded unexpected result").is_none(),
+        "expected stream to end after error"
+    );
+
+    mock.assert_calls_async(0).await;
 }

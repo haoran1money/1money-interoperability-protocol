@@ -1,0 +1,31 @@
+[package]
+name         = "onemoney_interop"
+edition      = { workspace = true }
+version      = { workspace = true }
+license      = { workspace = true }
+authors      = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+async-stream        = { workspace = true }
+alloy-contract      = { workspace = true }
+alloy-sol-types     = { workspace = true, features = [ "json" ] }
+alloy-primitives    = { workspace = true }
+alloy-provider      = { workspace = true, features = [ "ws" ] }
+alloy-rpc-types-eth = { workspace = true }
+alloy-transport     = { workspace = true }
+futures             = { workspace = true }
+thiserror           = { workspace = true }
+url                 = { workspace = true }
+tokio               = { workspace = true, features = [ "macros", "rt-multi-thread", "time" ] }
+tracing             = { workspace = true }
+
+[dev-dependencies]
+alloy-node-bindings  = { workspace = true }
+alloy-signer-local   = { workspace = true }
+alloy-transport-http = { workspace = true }
+color-eyre           = { workspace = true }
+tracing-subscriber   = { workspace = true, features = [ "fmt" ] }
+
+[lints]
+workspace = true

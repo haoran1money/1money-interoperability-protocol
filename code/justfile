@@ -1,17 +1,23 @@
 set shell := ["bash", "-c"]
 
 # One-shot target for pre-commit checks
-precommit: fmt lint build check-tests
+precommit: fmt-check lint build check-tests
+
+# Check formatting of all project files
+fmt-check:
+	cargo +nightly fmt --all --check
+	taplo fmt --check
+	deno fmt --check ../.github/**/*.yaml ../.github/**/*.yml
 
 # Format all project files
 fmt:
-	cargo fmt --all
-	taplo fmt --check .
-	deno fmt --check ../.github/**/*.yaml ../.github/**/*.yml
+	cargo +nightly fmt --all
+	taplo fmt
+	deno fmt ../.github/**/*.yaml ../.github/**/*.yml
 
 # Lint all components
 lint:
-	cargo clippy --tests -- -D warnings
+	cargo +nightly clippy --tests -- -D warnings
 	forge lint --force
 
 # Build artifacts

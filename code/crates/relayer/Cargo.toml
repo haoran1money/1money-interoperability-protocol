@@ -28,6 +28,7 @@ tokio              = { workspace = true, features = [ "full" ] }
 onemoney-protocol = { workspace = true }
 
 validator_manager = { workspace = true }
+onemoney_interop  = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }

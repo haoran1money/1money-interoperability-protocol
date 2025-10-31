@@ -8,4 +8,6 @@ pub enum Error {
     Onemoney(#[from] crate::onemoney::error::Error),
     #[error(transparent)]
     Poa(#[from] crate::poa::error::Error),
+    #[error(transparent)]
+    Incoming(#[from] crate::incoming::error::Error),
 }

@@ -40,10 +40,11 @@ alloy-transport      = { version = "1" }
 alloy-node-bindings  = { version = "1" }
 alloy-transport-http = { version = "1" }
 
-onemoney-protocol = { version = "0.6.0" }
+onemoney-protocol = { version = "0.8.0", features = [ "bridge" ] }
 
 # local crates
 validator_manager = { path = "crates/validator_manager" }
+onemoney_interop  = { path = "crates/onemoney_interop" }
 
 [workspace.lints.rust]
 unsafe_code          = "forbid"

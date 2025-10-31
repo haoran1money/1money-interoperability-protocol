@@ -1,5 +1,6 @@
 use core::time::Duration;
 
+use alloy_primitives::Address;
 use tracing::info;
 
 use crate::config::Config;
@@ -15,8 +16,8 @@ pub struct Cli {
 
 #[derive(clap::Subcommand)]
 pub enum Commands {
-    /// Relay POA events from onemoney endpoint to sidechain
-    Poa {
+    /// Relay Proof-of-Authority events from 1Money to the sidechain
+    ProofOfAuthority {
         #[arg(
             long,
             value_parser = humantime::parse_duration,
@@ -25,18 +26,48 @@ pub enum Commands {
         )]
         poll_interval: Duration,
     },
+    /// Relay sidechain interoperability events into 1Money
+    SideChain {
+        #[arg(
+            long,
+            help = "Address of the OMInterop contract deployed on the sidechain (0x-prefixed hex)"
+        )]
+        interop_contract_address: Address,
+        #[arg(
+            long,
+            default_value_t = 0_u64,
+            help = "Starting block number on the sidechain to scan for events (inclusive)"
+        )]
+        from_block: u64,
+    },
 }
 
 impl Cli {
     pub async fn run(self) -> Result<(), crate::error::Error> {
         let Self { config, command } = self;
         match command {
-            Commands::Poa { poll_interval } => {
+            Commands::ProofOfAuthority { poll_interval } => {
                 info!(
+                    ?poll_interval,
                     "Relaying POA events from {} to {}",
-                    config.one_money_node_url, config.side_chain_node_url
+                    config.one_money_node_url,
+                    config.side_chain_node_url
                 );
                 crate::poa::relay_poa_events(&config, poll_interval).await?;
+            }
+            Commands::SideChain {
+                interop_contract_address,
+                from_block,
+            } => {
+                info!(
+                    ?interop_contract_address,
+                    from_block,
+                    "Relaying SC events from {} to {}",
+                    config.side_chain_node_url,
+                    config.one_money_node_url
+                );
+                crate::incoming::relay_sc_events(&config, interop_contract_address, from_block)
+                    .await?;
             }
         }
         Ok(())

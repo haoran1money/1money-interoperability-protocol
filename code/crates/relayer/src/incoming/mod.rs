@@ -9,13 +9,14 @@ use crate::config::Config;
 pub mod error;
 mod handlers;
 
-use handlers::{handle_om_interop_received, handle_om_interop_sent};
+use error::Error as IncomingError;
+use handlers::Relayer1MoneyContext;
 
 pub async fn relay_sc_events(
     config: &Config,
     interop_contract_address: Address,
     from_block: BlockNumber,
-) -> Result<(), error::Error> {
+) -> Result<(), IncomingError> {
     let mut sc_event_stream = onemoney_interop::event::event_stream(
         config.side_chain_node_url.clone(),
         interop_contract_address,
@@ -24,11 +25,17 @@ pub async fn relay_sc_events(
     .await;
 
     let onemoney_client = Client::custom(config.one_money_node_url.to_string())?;
+    let relayer_ctx =
+        Relayer1MoneyContext::new(&onemoney_client, &config.relayer_private_key).await?;
 
     while let Some(event) = sc_event_stream.try_next().await? {
-        let block_number = event.block_number;
-        let log_index = event.log_index;
-        let tx_hash = event.transaction_hash;
+        let block_number = event
+            .block_number
+            .ok_or(IncomingError::MissingBlockNumber)?;
+        let log_index = event.log_index.ok_or(IncomingError::MissingLogIndex)?;
+        let tx_hash = event
+            .transaction_hash
+            .ok_or(IncomingError::MissingTransactionHash)?;
         if event.removed {
             debug!(
                 ?block_number,
@@ -54,14 +61,18 @@ pub async fn relay_sc_events(
                     om_token = ?inner.omToken,
                     "Handling OMInteropReceived event"
                 );
-                handle_om_interop_received(
-                    &onemoney_client,
-                    inner.nonce,
-                    inner.to,
-                    inner.amount,
-                    inner.omToken,
-                )
-                .await?;
+
+                let response = relayer_ctx
+                    .handle_om_interop_received(inner, tx_hash)
+                    .await?;
+
+                info!(
+                    ?block_number,
+                    ?log_index,
+                    ?tx_hash,
+                    relayer_tx_hash = ?response.hash,
+                    "Submitted bridge_and_mint transaction to 1Money"
+                );
             }
             OMInterop::OMInteropEvents::OMInteropSent(inner) => {
                 info!(
@@ -75,14 +86,25 @@ pub async fn relay_sc_events(
                     om_token = ?inner.omToken,
                     "Handling OMInteropSent event"
                 );
-                handle_om_interop_sent(
-                    &onemoney_client,
-                    inner.nonce,
-                    inner.from,
-                    inner.refundAmount,
-                    inner.omToken,
-                )
-                .await?;
+
+                if inner.refundAmount.is_zero() {
+                    warn!(
+                        ?block_number,
+                        ?log_index,
+                        ?tx_hash,
+                        "OMInteropSent event with zero refund amount. Can't skip because of nonce tracking.",
+                    );
+                }
+
+                let response = relayer_ctx.handle_om_interop_sent(inner).await?;
+
+                info!(
+                    ?block_number,
+                    ?log_index,
+                    ?tx_hash,
+                    relayer_tx_hash = ?response.hash,
+                    "Submitted refund payment transaction to 1Money"
+                );
             }
             OMInterop::OMInteropEvents::OperatorUpdated(inner) => {
                 warn!(

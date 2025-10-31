@@ -19,6 +19,7 @@ fmt:
 lint:
 	cargo +nightly clippy --tests -- -D warnings
 	forge lint --force
+	typos --exclude solidity/lib
 
 # Build artifacts
 build:

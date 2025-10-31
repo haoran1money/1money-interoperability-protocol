@@ -56,9 +56,9 @@
         {
             "hash": "0x1fe3c4deb49a25ac50c7bd8822638e54447ac31b12d7f3a581d6b1f29a23cf70",
             "checkpoint_hash": "0x691c40cc513ed3e34bca9601271382662f4256b7eac0c74ed1fdbdd00c539cde",
-            "checkpoint_number": 3,
-            "transaction_index": 4,
-            "recent_checkpoint": 2,
+            "checkpoint_number": 1,
+            "transaction_index": 2,
+            "recent_checkpoint": 0,
             "chain_id": 1212101,
             "from": "0x8a26d6017999386126287b61566bba1a93822ce6",
             "nonce": 1,
@@ -77,9 +77,9 @@
         {
             "hash": "0x05e0238f5f130a41d1102d9e532e338eac86f6d1bf427e39fb9e427598c64034",
             "checkpoint_hash": "0x06a9d1306d4d79e880328be616b04b16d4dca7582b4cfedd83459e839b897035",
-            "checkpoint_number": 7,
-            "transaction_index": 0,
-            "recent_checkpoint": 6,
+            "checkpoint_number": 1,
+            "transaction_index": 3,
+            "recent_checkpoint": 0,
             "chain_id": 1212101,
             "from": "0x2d4c699936bcccbcde1ea12392b080181f17c2c2",
             "nonce": 0,
@@ -87,6 +87,30 @@
             "data": {
                 "value": "200000000",
                 "recipient": "0xc7a8e117cb43d7935da4c30b9f9d0cdb5a372808",
+                "token": "0xf864012249f6843fbdc1eb0d55aff9252c09cef8"
+            },
+            "signature": {
+                "r": "0x197f31a5ab1492c2a06d29a419e49e0d8fc439ce6e61225babf66e6801e76668",
+                "s": "0x41f0a26800b13b7782267af56ebd467220c3d49f02834ff0420124b5aa2ac626",
+                "v": 1
+            }
+        },
+        {
+            "hash": "0x05e0238f5f130a41d1102d9e532e338eac86f6d1bf427e39fb9e427598c64034",
+            "checkpoint_hash": "0x06a9d1306d4d79e880328be616b04b16d4dca7582b4cfedd83459e839b897035",
+            "checkpoint_number": 1,
+            "transaction_index": 4,
+            "recent_checkpoint": 0,
+            "chain_id": 1212101,
+            "from": "0x2d4c699936bcccbcde1ea12392b080181f17c2c2",
+            "nonce": 0,
+            "transaction_type": "TokenBurnAndBridge",
+            "data": {
+                "value": "200000000",
+                "sender": "0xc7a8e117cb43d7935da4c30b9f9d0cdb5a372808",
+                "destination_chain_id": 1,
+                "destination_address": "0xc7a8e117cb43d7935da4c30b9f9d0cdb5a372808",
+                "escrow_fee": "1000",
                 "token": "0xf864012249f6843fbdc1eb0d55aff9252c09cef8"
             },
             "signature": {

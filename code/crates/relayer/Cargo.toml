@@ -31,8 +31,9 @@ validator_manager = { workspace = true }
 onemoney_interop  = { workspace = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
-httpmock   = { workspace = true }
+alloy-node-bindings = { workspace = true }
+serde_json          = { workspace = true }
+httpmock            = { workspace = true }
 
 [lints]
 workspace = true

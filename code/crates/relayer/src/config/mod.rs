@@ -1,3 +1,4 @@
+use alloy_primitives::Address;
 use alloy_signer_local::PrivateKeySigner;
 use url::Url;
 
@@ -9,4 +10,6 @@ pub struct Config {
     pub side_chain_node_url: Url,
     #[arg(long, env = "RELAYER_PRIVATE_KEY")]
     pub relayer_private_key: PrivateKeySigner,
+    #[arg(long, env = "OMINTEROP_ADDRESS")]
+    pub ominterop_address: Address,
 }

@@ -10,4 +10,6 @@ pub enum Error {
     Poa(#[from] crate::poa::error::Error),
     #[error(transparent)]
     Incoming(#[from] crate::incoming::error::Error),
+    #[error(transparent)]
+    Outgoing(#[from] crate::outgoing::error::Error),
 }

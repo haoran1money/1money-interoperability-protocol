@@ -34,6 +34,21 @@ pub enum Commands {
         )]
         from_block: u64,
     },
+    /// Relay 1Money interoperability events into Sidechain
+    OneMoney {
+        #[arg(
+            long,
+            help = "Starting checkpoint number on 1Money to scan for events (inclusive)"
+        )]
+        start_checkpoint: u64,
+        #[arg(
+            long,
+            value_parser = humantime::parse_duration,
+            default_value = "10s",
+            help = "Polling interval for fetching checkpoints (human-friendly, e.g. 10s, 1m)"
+        )]
+        poll_interval: Duration,
+    },
 }
 
 impl Cli {
@@ -58,6 +73,23 @@ impl Cli {
                     config.one_money_node_url
                 );
                 crate::incoming::relay_sc_events(&config, from_block).await?;
+            }
+            Commands::OneMoney {
+                start_checkpoint,
+                poll_interval,
+            } => {
+                info!(
+                    start_checkpoint,
+                    "Relaying 1Money events from {} to {}",
+                    config.one_money_node_url,
+                    config.side_chain_node_url
+                );
+                crate::outgoing::stream::relay_outgoing_events(
+                    &config,
+                    start_checkpoint,
+                    poll_interval,
+                )
+                .await?;
             }
         }
         Ok(())

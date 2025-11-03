@@ -1,5 +1,4 @@
 use core::time::Duration;
-use std::sync::Once;
 
 use alloy_node_bindings::Anvil;
 use alloy_primitives::{Address, U256};
@@ -10,14 +9,6 @@ use onemoney_interop::contract::OMInterop::{self, OMInteropEvents};
 use onemoney_interop::error::Error as OMInteropError;
 use onemoney_interop::event::{event_stream, OMInteropLog};
 use tracing::{debug, info};
-
-static INIT_TRACING: Once = Once::new();
-
-fn init_tracing() {
-    INIT_TRACING.call_once(|| {
-        let _ = tracing_subscriber::fmt::try_init();
-    });
-}
 
 async fn next_event<T>(stream: &mut T) -> OMInteropEvents
 where
@@ -33,9 +24,8 @@ where
 }
 
 #[tokio::test]
+#[test_log::test]
 async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
-    init_tracing();
-
     info!("starting OMInterop event stream integration test");
 
     let anvil = Anvil::new().try_spawn()?;

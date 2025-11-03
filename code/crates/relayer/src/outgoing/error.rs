@@ -16,6 +16,10 @@ pub enum Error {
     PendingTransaction(#[from] alloy_provider::PendingTransactionError),
     #[error(transparent)]
     Sidechain(#[from] crate::onemoney::error::Error),
+    #[error("Contract reverted: {0:?}")]
+    ContractReverted(onemoney_interop::contract::OMInterop::OMInteropErrors),
+    #[error("Missing checkpoint number in transaction")]
+    MissingCheckpointNumber,
     #[error("Generic error: {0}")]
     Generic(String),
 }

@@ -1,7 +1,7 @@
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::OMInterop;
 use onemoney_protocol::{Client, Transaction, TxPayload};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info};
 
 use crate::config::Config;
 use crate::onemoney::transaction::get_transactions_from_checkpoint;
@@ -12,7 +12,6 @@ use crate::outgoing::error::Error;
 pub async fn process_burn_and_bridge_transactions(
     config: &Config,
     tx: Transaction,
-    checkpoint_number: u64,
 ) -> Result<(), Error> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
@@ -35,6 +34,8 @@ pub async fn process_burn_and_bridge_transactions(
         ));
     };
 
+    let checkpoint_number = tx.checkpoint_number.ok_or(Error::MissingCheckpointNumber)?;
+
     let client = Client::custom(config.one_money_node_url.to_string())?;
     // TODO: Use get_account_bbnonce() once implemented
     let bbnonce = client.get_account_nonce(sender).await?;
@@ -51,7 +52,13 @@ pub async fn process_burn_and_bridge_transactions(
             checkpoint_number,
         )
         .send()
-        .await?
+        .await
+        .map(Ok)
+        .or_else(|e| {
+            e.try_decode_into_interface_error::<OMInterop::OMInteropErrors>()
+                .map(Err)
+        })?
+        .map_err(Error::ContractReverted)?
         .get_receipt()
         .await?;
 
@@ -79,15 +86,11 @@ pub async fn process_checkpoint_number(
     );
 
     for burn_and_bridge in burn_and_bridge_txs {
-        if let Err(e) =
-            process_burn_and_bridge_transactions(config, burn_and_bridge, checkpoint_number).await
-        {
-            warn!(
-                "Failed to process burn and bridge transaction, skipping to next transaction: {}",
-                e
-            );
-            continue;
-        }
+        process_burn_and_bridge_transactions(config, burn_and_bridge)
+            .await
+            .inspect_err(|err| {
+                error!("Failed processing burn and bridge transaction at checkpoint {checkpoint_number}: {err:?}");
+            })?;
     }
 
     Ok(())

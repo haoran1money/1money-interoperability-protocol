@@ -11,6 +11,7 @@ use crate::onemoney::error::Error;
 use crate::onemoney::types::epoch::{Epoch, RawEpoch};
 
 pub mod error;
+pub mod stream;
 pub mod transaction;
 pub mod types;
 

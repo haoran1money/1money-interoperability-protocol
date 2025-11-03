@@ -1,6 +1,5 @@
-use std::sync::Once;
-
 use alloy_node_bindings::Anvil;
+use alloy_primitives::address;
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::PrivateKeySigner;
 use httpmock::prelude::*;
@@ -11,22 +10,13 @@ use serde_json::json;
 
 const CHECKPOINT_JSON: &str = include_str!("../src/onemoney/tests/data/checkpoint.json");
 
-static INIT_TRACING: Once = Once::new();
-
-fn init_tracing() {
-    INIT_TRACING.call_once(|| {
-        let _ = tracing_subscriber::fmt::try_init();
-    });
-}
-
 fn build_checkpoint_response() -> serde_json::Value {
     serde_json::from_str(CHECKPOINT_JSON).expect("failed to read data/epoch.json")
 }
 
 #[tokio::test]
+#[test_log::test]
 async fn test_process_burn_and_bridge() {
-    init_tracing();
-
     let anvil = Anvil::new().try_spawn().unwrap();
 
     let keys = anvil.keys();
@@ -35,10 +25,12 @@ async fn test_process_burn_and_bridge() {
     let owner_wallet: PrivateKeySigner = keys[0].clone().into();
     let operator_wallet: PrivateKeySigner = keys[1].clone().into();
     let relayer_wallet: PrivateKeySigner = keys[2].clone().into();
+    let sc_token_wallet: PrivateKeySigner = keys[3].clone().into();
 
     let owner_addr = owner_wallet.address();
     let operator_addr = operator_wallet.address();
     let relayer_addr = relayer_wallet.address();
+    let sc_token_addr = sc_token_wallet.address();
 
     let owner_provider = ProviderBuilder::new()
         .wallet(owner_wallet)
@@ -53,6 +45,30 @@ async fn test_process_burn_and_bridge() {
     .await
     .unwrap();
     let contract_addr = *contract.address();
+
+    let operator_provider = ProviderBuilder::new()
+        .wallet(operator_wallet.clone())
+        .connect_http(http_endpoint.clone());
+
+    let operator_contract = OMInterop::new(contract_addr, operator_provider.clone());
+
+    // from CHECKPOINT_JSON
+    let om_token_addr = address!("0xf864012249f6843fbdc1eb0d55aff9252c09cef8");
+
+    let _ = operator_contract
+        .mapTokenAddresses(om_token_addr, sc_token_addr, 1)
+        .send()
+        .await
+        .map(Ok)
+        .or_else(|e| {
+            e.try_decode_into_interface_error::<OMInterop::OMInteropErrors>()
+                .map(Err)
+        })
+        .unwrap()
+        .unwrap()
+        .get_receipt()
+        .await
+        .unwrap();
 
     let onemoney_server = MockServer::start_async().await;
     let response_body = build_checkpoint_response();

@@ -2851,10 +2851,10 @@ dependencies = [
  "async-stream",
  "color-eyre",
  "futures",
+ "test-log",
  "thiserror",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "url",
 ]
 

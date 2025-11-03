@@ -1,6 +1,5 @@
 use core::time::Duration;
 
-use alloy_primitives::Address;
 use tracing::info;
 
 use crate::config::Config;
@@ -30,11 +29,6 @@ pub enum Commands {
     SideChain {
         #[arg(
             long,
-            help = "Address of the OMInterop contract deployed on the sidechain (0x-prefixed hex)"
-        )]
-        interop_contract_address: Address,
-        #[arg(
-            long,
             default_value_t = 0_u64,
             help = "Starting block number on the sidechain to scan for events (inclusive)"
         )]
@@ -55,19 +49,15 @@ impl Cli {
                 );
                 crate::poa::relay_poa_events(&config, poll_interval).await?;
             }
-            Commands::SideChain {
-                interop_contract_address,
-                from_block,
-            } => {
+            Commands::SideChain { from_block } => {
                 info!(
-                    ?interop_contract_address,
+                    ?config.interop_contract_address,
                     from_block,
                     "Relaying SC events from {} to {}",
                     config.side_chain_node_url,
                     config.one_money_node_url
                 );
-                crate::incoming::relay_sc_events(&config, interop_contract_address, from_block)
-                    .await?;
+                crate::incoming::relay_sc_events(&config, from_block).await?;
             }
         }
         Ok(())

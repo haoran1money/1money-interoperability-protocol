@@ -42,7 +42,7 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
 
     let http_endpoint = anvil.endpoint_url();
     let ws_endpoint = anvil.ws_endpoint_url();
-    debug!(?http_endpoint, ?ws_endpoint, "anvil endpoints");
+    debug!(%http_endpoint, %ws_endpoint, "anvil endpoints");
 
     let keys = anvil.keys();
     let addresses = anvil.addresses();
@@ -96,7 +96,7 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
         .await?;
     debug!("mapTokenAddresses transaction confirmed");
 
-    let mut stream = event_stream(ws_endpoint, contract_addr, 0).await;
+    let mut stream = event_stream(http_endpoint, contract_addr, 0).await;
     debug!("subscribed to OMInterop event stream");
 
     let ownership_transferred = next_event(&mut stream).await;
@@ -174,15 +174,17 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
     debug!("received OMInteropReceived event");
     match received_event {
         OMInterop::OMInteropEvents::OMInteropReceived(event) => {
-            assert_eq!(event.nonce, 1);
+            assert_eq!(event.nonce, 0);
             assert_eq!(event.to, user_address);
             assert_eq!(event.amount, U256::from(500u64));
             assert_eq!(event.omToken, om_token);
+            assert_eq!(event.interopProtoId, 1u8);
             info!(
                 nonce = %event.nonce,
                 to = ?user_address,
                 amount = ?event.amount,
                 om_token = ?event.omToken,
+                interop_proto_id = event.interopProtoId,
                 "bridgeFrom emitted"
             );
         }
@@ -214,11 +216,13 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
             assert_eq!(event.from, user_address);
             assert_eq!(event.refundAmount, U256::from(5u64));
             assert_eq!(event.omToken, om_token);
+            assert_eq!(event.interopProtoId, 1u8);
             info!(
                 nonce = %event.nonce,
                 from = ?user_address,
                 refund = ?event.refundAmount,
                 om_token = ?event.omToken,
+                interop_proto_id = event.interopProtoId,
                 destination = ?destination,
                 "bridgeTo emitted"
             );

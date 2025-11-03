@@ -19,11 +19,12 @@ contract OMInteropTest is Test {
         interop = new OMInterop(OWNER, OPERATOR, RELAYER);
     }
 
-    function testInitialRoles() public view {
+    function testInitialRoles() public {
         assertEq(interop.owner(), OWNER, "owner mismatch");
         assertEq(interop.operator(), OPERATOR, "operator mismatch");
         assertEq(interop.relayer(), RELAYER, "relayer mismatch");
-        assertEq(interop.getLatestInboundNonce(), 0, "unexpected inbound nonce");
+        vm.expectRevert(abi.encodeWithSignature("InboundNonceUnavailable()"));
+        interop.getLatestInboundNonce();
         assertEq(interop.getLatestProcessedNonce(address(0xAB)), 0, "unexpected processed nonce");
         (uint32 certified, uint32 completed) = interop.getCheckpointTally(0);
         assertEq(certified, 0);
@@ -57,18 +58,18 @@ contract OMInteropTest is Test {
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
 
         vm.expectEmit(true, true, false, true, address(interop));
-        emit IOMInterop.OMInteropReceived(1, address(0x99), 100, OM_TOKEN);
+        emit IOMInterop.OMInteropReceived(0, address(0x99), 100, OM_TOKEN, 1);
 
         vm.prank(SIDECHAIN_TOKEN);
         interop.bridgeFrom(address(0x99), 100);
 
         vm.expectEmit(true, true, false, true, address(interop));
-        emit IOMInterop.OMInteropReceived(2, address(0x98), 50, OM_TOKEN);
+        emit IOMInterop.OMInteropReceived(1, address(0x98), 50, OM_TOKEN, 1);
 
         vm.prank(SIDECHAIN_TOKEN);
         interop.bridgeFrom(address(0x98), 50);
 
-        assertEq(interop.getLatestInboundNonce(), 2, "inbound nonce mismatch");
+        assertEq(interop.getLatestInboundNonce(), 1, "inbound nonce mismatch");
     }
 
     function testBridgeFromUnknownTokenReverts() public {
@@ -86,7 +87,7 @@ contract OMInteropTest is Test {
         interop.updateCheckpointInfo(checkpointId, 1);
 
         vm.expectEmit(true, true, false, true, address(interop));
-        emit IOMInterop.OMInteropSent(1, address(0x01), 5, OM_TOKEN);
+        emit IOMInterop.OMInteropSent(0, address(0x01), 5, OM_TOKEN, 1);
 
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 1, address(0x02), 100, 111, 5, OM_TOKEN, checkpointId);

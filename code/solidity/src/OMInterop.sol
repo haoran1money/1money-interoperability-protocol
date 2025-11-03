@@ -42,13 +42,14 @@ contract OMInterop is Ownable, IOMInterop {
     error InvalidChainId();
     error CheckpointCompleted(uint64 checkpointId);
     error NoCompletedCheckpoint();
+    error InboundNonceUnavailable();
 
     /// @notice Operator address allowed to configure the contract.
     address public operator;
     /// @notice Relayer address allowed to execute bridge operations.
     address public relayer;
-    /// @notice Sequential nonce incremented for each call to `bridgeFrom`.
-    uint64 private _inboundNonce;
+    /// @notice Next inbound nonce assigned to successful `bridgeFrom` executions.
+    uint64 private _nextInboundNonce;
     /// @notice Earliest checkpoint index that is still incomplete (latest completed + 1).
     uint64 private _earliestIncompletedCheckpoint;
     mapping(address => TokenBinding) private _tokensBySidechain;
@@ -142,7 +143,7 @@ contract OMInterop is Ownable, IOMInterop {
         recordInboundNonce
     {
         TokenBinding storage binding = _tokensBySidechain[msg.sender];
-        emit OMInteropReceived(_inboundNonce, to, amount, binding.omToken);
+        emit OMInteropReceived(_latestInboundNonceInternal(), to, amount, binding.omToken, binding.interopProtoId);
     }
 
     /// @inheritdoc IOMInterop
@@ -234,7 +235,7 @@ contract OMInterop is Ownable, IOMInterop {
 
     /// @inheritdoc IOMInterop
     function getLatestInboundNonce() external view override returns (uint64 nonce) {
-        nonce = _inboundNonce;
+        nonce = _latestInboundNonceInternal();
     }
 
     /// @inheritdoc IOMInterop
@@ -289,8 +290,10 @@ contract OMInterop is Ownable, IOMInterop {
     }
 
     function _increaseInboundNonce() internal {
-        if (_inboundNonce == type(uint64).max) revert InboundNonceOverflow();
-        _inboundNonce += 1;
+        if (_nextInboundNonce == type(uint64).max) revert InboundNonceOverflow();
+        unchecked {
+            _nextInboundNonce += 1;
+        }
     }
 
     function _revertIfCheckpointComplete(uint64 checkpointId) internal view {
@@ -312,10 +315,14 @@ contract OMInterop is Ownable, IOMInterop {
         _revertIfCheckpointComplete(req.checkpointId);
     }
 
-    function _bridgeTo(BridgeToRequest memory req) internal bridgeToValidated(req) {
+    function _bridgeTo(BridgeToRequest memory req) internal bridgeToValidated(req) recordInboundNonce {
         _recordCheckpointProgress(req.checkpointId);
         // TODO: invoke cross-chain bridge contract with req parameters before emitting event.
-        emit OMInteropSent(req.bbNonce, req.from, req.escrowFee, req.omToken);
+        // For now, we refund the full escrowFee.
+        TokenBinding storage binding = _tokensByOm[req.omToken];
+        emit OMInteropSent(
+            _latestInboundNonceInternal(), req.from, req.escrowFee, req.omToken, binding.interopProtoId
+        );
     }
 
     function _recordCheckpointProgress(uint64 checkpointId) internal {
@@ -345,6 +352,16 @@ contract OMInterop is Ownable, IOMInterop {
     function _ensureCheckpointNotCompleted(uint64 checkpointId) internal view {
         if (checkpointId < _earliestIncompletedCheckpoint) {
             revert CheckpointCompleted(checkpointId);
+        }
+    }
+
+    function _latestInboundNonceInternal() internal view returns (uint64) {
+        uint64 next = _nextInboundNonce;
+        if (next == 0) {
+            revert InboundNonceUnavailable();
+        }
+        unchecked {
+            return next - 1;
         }
     }
 }

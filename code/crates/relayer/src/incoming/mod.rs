@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, BlockNumber};
+use alloy_primitives::BlockNumber;
 use futures::TryStreamExt;
 use onemoney_interop::contract::OMInterop;
 use onemoney_protocol::client::http::Client;
@@ -14,12 +14,11 @@ use handlers::Relayer1MoneyContext;
 
 pub async fn relay_sc_events(
     config: &Config,
-    interop_contract_address: Address,
     from_block: BlockNumber,
 ) -> Result<(), IncomingError> {
     let mut sc_event_stream = onemoney_interop::event::event_stream(
         config.side_chain_node_url.clone(),
-        interop_contract_address,
+        config.interop_contract_address,
         from_block,
     )
     .await;
@@ -59,6 +58,7 @@ pub async fn relay_sc_events(
                     to = ?inner.to,
                     amount = %inner.amount,
                     om_token = ?inner.omToken,
+                    interop_proto_id = inner.interopProtoId,
                     "Handling OMInteropReceived event"
                 );
 
@@ -84,6 +84,7 @@ pub async fn relay_sc_events(
                     from = ?inner.from,
                     refund = %inner.refundAmount,
                     om_token = ?inner.omToken,
+                    interop_proto_id = inner.interopProtoId,
                     "Handling OMInteropSent event"
                 );
 

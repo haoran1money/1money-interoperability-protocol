@@ -87,7 +87,7 @@ async fn test_process_burn_and_bridge() {
         one_money_node_url: onemoney_server.base_url().parse().unwrap(),
         side_chain_node_url: http_endpoint,
         relayer_private_key: relayer_wallet,
-        ominterop_address: contract_addr,
+        interop_contract_address: contract_addr,
     };
 
     process_checkpoint_number(&config, 1).await.unwrap();

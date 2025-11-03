@@ -18,25 +18,30 @@ pub type OMInteropLog = RpcLog<OMInterop::OMInteropEvents>;
 /// The stream first yields any historical events since `from_block`, then
 /// continues polling the node for new events by subscribing to logs over WebSocket.
 pub async fn event_stream(
-    endpoint: Url,
+    http_endpoint: Url,
     contract: Address,
     from_block: u64,
 ) -> BoxStream<'static, Result<OMInteropLog, OMInteropError>> {
     try_stream! {
-        let ws = WsConnect::new(endpoint.to_string());
-        let provider = ProviderBuilder::new().connect_ws(ws).await?;
+        let ws_endpoint = http_endpoint
+            .as_str()
+            .replace("http://", "ws://")
+            .replace("https://", "wss://"); // TODO: can we do better URL manipulation?
+        let ws = WsConnect::new(ws_endpoint);
+        let http_provider = ProviderBuilder::new().connect_http(http_endpoint);
+        let ws_provider = ProviderBuilder::new().connect_ws(ws).await?;
 
         let mut last_position = from_block
             .checked_sub(1)
             .map(|block| (block, u64::MAX));
 
         let live_filter = Filter::new().address(contract);
-        let mut live_stream = provider
+        let mut live_stream = ws_provider
             .subscribe_logs(&live_filter)
             .await?
             .into_stream();
 
-        let latest_block = provider
+        let latest_block = http_provider
             .get_block_number()
             .await?;
 
@@ -49,7 +54,7 @@ pub async fn event_stream(
                 .address(contract)
                 .select(from_block..=live_start);
 
-            let historical = provider.get_logs(&history_filter).await?;
+            let historical = http_provider.get_logs(&history_filter).await?;
 
             let mut decoded = historical
                 .into_iter()

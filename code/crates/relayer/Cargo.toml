@@ -32,6 +32,10 @@ onemoney_interop  = { workspace = true }
 
 [dev-dependencies]
 alloy-node-bindings = { workspace = true }
+alloy-rlp           = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
+serde               = { workspace = true, features = [ "derive" ] }
+test-log            = { workspace = true }
 serde_json          = { workspace = true }
 httpmock            = { workspace = true }
 

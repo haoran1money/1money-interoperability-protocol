@@ -66,12 +66,14 @@ impl<'a> Relayer1MoneyContext<'a> {
             to,
             amount,
             omToken: om_token,
+            interopProtoId: interop_proto_id,
         }: OMInteropReceived,
         source_tx_hash: B256,
     ) -> Result<TransactionResponse, IncomingError> {
         self.validate_nonce(sidechain_nonce).await?;
 
         let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
+        let interop_proto_id_u64 = u64::from(interop_proto_id);
 
         let payload = TokenBridgeAndMintPayload {
             recent_checkpoint,
@@ -80,7 +82,7 @@ impl<'a> Relayer1MoneyContext<'a> {
             recipient: to,
             value: amount,
             token: om_token,
-            source_chain_id: 1, // TODO: Replace with actual source chain ID
+            source_chain_id: interop_proto_id_u64,
             source_tx_hash: source_tx_hash.encode_hex_with_prefix(),
             bridge_metadata: None,
         };
@@ -98,6 +100,7 @@ impl<'a> Relayer1MoneyContext<'a> {
             from,
             refundAmount: refund_amount,
             omToken: om_token,
+            interopProtoId: _interop_proto_id,
         }: OMInteropSent,
     ) -> Result<TransactionResponse, IncomingError> {
         self.validate_nonce(sidechain_nonce).await?;

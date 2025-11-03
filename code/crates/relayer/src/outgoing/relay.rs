@@ -18,7 +18,7 @@ pub async fn process_burn_and_bridge_transactions(
         .wallet(config.relayer_private_key.clone())
         .connect_http(config.side_chain_node_url.clone());
 
-    let contract = OMInterop::new(config.ominterop_address, provider);
+    let contract = OMInterop::new(config.interop_contract_address, provider);
 
     let TxPayload::TokenBurnAndBridge {
         value,

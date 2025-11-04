@@ -168,13 +168,13 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
             assert_eq!(event.to, user_address);
             assert_eq!(event.amount, U256::from(500u64));
             assert_eq!(event.omToken, om_token);
-            assert_eq!(event.interopProtoId, 1u8);
+            assert_eq!(event.srcChainId, 1);
             info!(
                 nonce = %event.nonce,
                 to = ?user_address,
                 amount = ?event.amount,
                 om_token = ?event.omToken,
-                interop_proto_id = event.interopProtoId,
+                src_chain_id = event.srcChainId,
                 "bridgeFrom emitted"
             );
         }
@@ -206,13 +206,13 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
             assert_eq!(event.from, user_address);
             assert_eq!(event.refundAmount, U256::from(5u64));
             assert_eq!(event.omToken, om_token);
-            assert_eq!(event.interopProtoId, 1u8);
+            assert_eq!(event.dstChainId, 10);
             info!(
                 nonce = %event.nonce,
                 from = ?user_address,
                 refund = ?event.refundAmount,
                 om_token = ?event.omToken,
-                interop_proto_id = event.interopProtoId,
+                dst_chain_id = event.dstChainId,
                 destination = ?destination,
                 "bridgeTo emitted"
             );

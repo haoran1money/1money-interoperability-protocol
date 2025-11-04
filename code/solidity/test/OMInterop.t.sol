@@ -57,14 +57,15 @@ contract OMInteropTest is Test {
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
 
+        uint32 chainId = 1;
         vm.expectEmit(true, true, false, true, address(interop));
-        emit IOMInterop.OMInteropReceived(0, address(0x99), 100, OM_TOKEN, 1);
+        emit IOMInterop.OMInteropReceived(0, address(0x99), 100, OM_TOKEN, chainId);
 
         vm.prank(SIDECHAIN_TOKEN);
         interop.bridgeFrom(address(0x99), 100);
 
         vm.expectEmit(true, true, false, true, address(interop));
-        emit IOMInterop.OMInteropReceived(1, address(0x98), 50, OM_TOKEN, 1);
+        emit IOMInterop.OMInteropReceived(1, address(0x98), 50, OM_TOKEN, chainId);
 
         vm.prank(SIDECHAIN_TOKEN);
         interop.bridgeFrom(address(0x98), 50);
@@ -87,7 +88,7 @@ contract OMInteropTest is Test {
         interop.updateCheckpointInfo(checkpointId, 1);
 
         vm.expectEmit(true, true, false, true, address(interop));
-        emit IOMInterop.OMInteropSent(0, address(0x01), 5, OM_TOKEN, 1);
+        emit IOMInterop.OMInteropSent(0, address(0x01), 5, OM_TOKEN, 111);
 
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 1, address(0x02), 100, 111, 5, OM_TOKEN, checkpointId);

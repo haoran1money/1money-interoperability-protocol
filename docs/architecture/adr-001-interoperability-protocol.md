@@ -205,14 +205,14 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
             address to, // Destination account
             uint256 amount, // Amount of tokens to mint
             address omToken, // The token address on the 1Money payment network
-            uint8 interopProtoId // Identifier of the bridge/protocol this token is bound to
+            uint32 srcChainId // Source chain identifier provided by the cross-chain protocol
         );
         event OMInteropSent(
             uint64 nonce, // Nonce used by the relayer to submit the matching Transfer instruction
             address from, // Source account (needed to refund the unused fee)
             uint256 refundAmount, // Amount of tokens to refund the user
             address omToken, // The token address on the 1Money payment network
-            uint8 interopProtoId // Identifier of the bridge/protocol this token is bound to
+            uint32 dstChainId // Destination chain identifier provided by the sender
         )
         
         // bridgeFrom emits OMInteropReceived

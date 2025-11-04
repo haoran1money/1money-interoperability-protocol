@@ -44,6 +44,9 @@ contract OMInterop is Ownable, IOMInterop {
     error NoCompletedCheckpoint();
     error InboundNonceUnavailable();
 
+    /// @notice Temporary constant for the source chain identifier.
+    uint32 internal constant SRC_CHAIN_ID = 1;
+
     /// @notice Operator address allowed to configure the contract.
     address public operator;
     /// @notice Relayer address allowed to execute bridge operations.
@@ -143,7 +146,7 @@ contract OMInterop is Ownable, IOMInterop {
         recordInboundNonce
     {
         TokenBinding storage binding = _tokensBySidechain[msg.sender];
-        emit OMInteropReceived(_latestInboundNonceInternal(), to, amount, binding.omToken, binding.interopProtoId);
+        emit OMInteropReceived(_latestInboundNonceInternal(), to, amount, binding.omToken, SRC_CHAIN_ID);
     }
 
     /// @inheritdoc IOMInterop
@@ -319,10 +322,7 @@ contract OMInterop is Ownable, IOMInterop {
         _recordCheckpointProgress(req.checkpointId);
         // TODO: invoke cross-chain bridge contract with req parameters before emitting event.
         // For now, we refund the full escrowFee.
-        TokenBinding storage binding = _tokensByOm[req.omToken];
-        emit OMInteropSent(
-            _latestInboundNonceInternal(), req.from, req.escrowFee, req.omToken, binding.interopProtoId
-        );
+        emit OMInteropSent(_latestInboundNonceInternal(), req.from, req.escrowFee, req.omToken, req.dstChainId);
     }
 
     function _recordCheckpointProgress(uint64 checkpointId) internal {

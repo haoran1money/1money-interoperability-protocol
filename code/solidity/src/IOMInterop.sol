@@ -4,12 +4,12 @@ pragma solidity ^0.8.22;
 interface IOMInterop {
     /// @notice Emitted when an incoming bridge transfer is registered on the sidechain.
     event OMInteropReceived(
-        uint64 nonce, address indexed to, uint256 amount, address indexed omToken, uint8 interopProtoId
+        uint64 nonce, address indexed to, uint256 amount, address indexed omToken, uint32 srcChainId
     );
 
     /// @notice Emitted when an outgoing bridge transfer is dispatched to an external chain.
     event OMInteropSent(
-        uint64 nonce, address indexed from, uint256 refundAmount, address indexed omToken, uint8 interopProtoId
+        uint64 nonce, address indexed from, uint256 refundAmount, address indexed omToken, uint32 dstChainId
     );
 
     /// @notice Records an incoming cross-chain transfer emitted by the token bridge.

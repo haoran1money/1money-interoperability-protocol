@@ -58,7 +58,7 @@ pub async fn relay_sc_events(
                     to = ?inner.to,
                     amount = %inner.amount,
                     om_token = ?inner.omToken,
-                    interop_proto_id = inner.interopProtoId,
+                    src_chain_id = inner.srcChainId,
                     "Handling OMInteropReceived event"
                 );
 
@@ -84,7 +84,7 @@ pub async fn relay_sc_events(
                     from = ?inner.from,
                     refund = %inner.refundAmount,
                     om_token = ?inner.omToken,
-                    interop_proto_id = inner.interopProtoId,
+                    dst_chain_id = inner.dstChainId,
                     "Handling OMInteropSent event"
                 );
 

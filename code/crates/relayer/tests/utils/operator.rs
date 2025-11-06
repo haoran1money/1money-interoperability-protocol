@@ -1,7 +1,6 @@
 use core::ops::ControlFlow;
 use core::str::FromStr;
 
-use alloy_primitives::hex::ToHexExt;
 use alloy_primitives::{keccak256, Address, U256};
 use alloy_rlp::Encodable;
 use alloy_signer_local::PrivateKeySigner;
@@ -94,7 +93,7 @@ impl<'a> OperationClient<'a> {
                         "Token issuance transaction submitted, waiting for confirmation"
                     );
 
-                    let tx_hash = response.hash.hash.encode_hex_with_prefix();
+                    let tx_hash = response.hash.hash;
                     match wait_for_transaction(client, &tx_hash, "token issuance confirmation")
                         .await?
                     {
@@ -154,7 +153,7 @@ impl<'a> OperationClient<'a> {
                     }
                 };
 
-                let tx_hash = response.hash.encode_hex_with_prefix();
+                let tx_hash = response.hash;
                 match wait_for_transaction(client, &tx_hash, "token mint confirmation").await? {
                     ControlFlow::Break(()) => {
                         info!(%tx_hash, "Token mint confirmed");
@@ -220,7 +219,7 @@ impl<'a> OperationClient<'a> {
                     }
                 };
 
-                let tx_hash = response.hash.encode_hex_with_prefix();
+                let tx_hash = response.hash;
                 match wait_for_transaction(client, &tx_hash, "authority grant confirmation").await?
                 {
                     ControlFlow::Break(()) => {

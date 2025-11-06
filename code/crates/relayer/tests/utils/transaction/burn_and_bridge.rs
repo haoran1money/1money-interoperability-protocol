@@ -67,7 +67,7 @@ pub async fn burn_and_bridge(
                         return Ok(None);
                     }
                 };
-                let tx_hash = response.hash.encode_hex_with_prefix();
+                let tx_hash = response.hash;
                 match wait_for_transaction(&client, &tx_hash, "burn and bridge confirmation")
                     .await?
                 {

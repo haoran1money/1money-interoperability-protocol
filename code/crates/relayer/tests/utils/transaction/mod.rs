@@ -1,5 +1,7 @@
 use core::ops::ControlFlow;
 
+use alloy_primitives::hex::ToHexExt;
+use alloy_primitives::B256;
 use color_eyre::eyre::{eyre, Result};
 use onemoney_protocol::{Client, Error as OnemoneyError};
 use tracing::{debug, warn};
@@ -14,10 +16,10 @@ pub mod types;
 /// `ControlFlow::Break` means the transaction is done; `ControlFlow::Continue` means to start over.
 pub async fn wait_for_transaction(
     client: &Client,
-    tx_hash: &str,
+    tx_hash: &B256,
     description: &str,
 ) -> Result<ControlFlow<(), ()>> {
-    let tx_hash = tx_hash.to_string();
+    let tx_hash = tx_hash.encode_hex_with_prefix();
     poll_with_timeout(description, POLL_INTERVAL, MAX_DURATION, || async {
         match client.get_transaction_by_hash(&tx_hash).await {
             Ok(_) => Ok(Some(ControlFlow::Break(()))),

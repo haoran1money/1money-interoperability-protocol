@@ -27,6 +27,7 @@ sha3               = { version = "0.10" }
 httpmock           = { version = "0.8" }
 serde_json         = { version = "1" }
 humantime          = { version = "2" }
+rstest             = { version = "0.26" }
 
 alloy-provider       = { version = "1" }
 alloy-primitives     = { version = "1" }

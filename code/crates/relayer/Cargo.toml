@@ -38,6 +38,7 @@ serde               = { workspace = true, features = [ "derive" ] }
 test-log            = { workspace = true }
 serde_json          = { workspace = true }
 httpmock            = { workspace = true }
+rstest              = { workspace = true }
 
 [lints]
 workspace = true

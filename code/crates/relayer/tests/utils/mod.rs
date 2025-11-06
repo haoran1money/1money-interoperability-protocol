@@ -8,6 +8,7 @@ use tracing::{debug, error, warn};
 
 pub mod account;
 pub mod operator;
+pub mod setup;
 pub mod transaction;
 
 use color_eyre::eyre::{eyre, Result};

@@ -12,7 +12,7 @@ use onemoney_interop::contract::OMInterop;
 use onemoney_protocol::{Authority, Client};
 use relayer::config::Config;
 use tracing::{debug, info};
-use utils::account::{fetch_balance, wait_for_balance_increase};
+use utils::account::{fetch_balance, wait_for_balance_change};
 use utils::operator::{OperationClient, OPERATOR_PRIVATE_KEY};
 use utils::spawn_relayer_and;
 
@@ -75,7 +75,7 @@ async fn ominterop_deposit_flow() -> Result<()> {
     let operator_client = OperationClient::new(&onemoney_client, OPERATOR_PRIVATE_KEY);
 
     let symbol = format!(
-        "OMTST{}",
+        "OMTST{:x}",
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)?
             .as_secs()
@@ -133,7 +133,7 @@ async fn ominterop_deposit_flow() -> Result<()> {
                 .get_receipt()
                 .await?;
 
-            let target_balance = wait_for_balance_increase(
+            let target_balance = wait_for_balance_change(
                 &onemoney_client,
                 recipient,
                 one_money_token,

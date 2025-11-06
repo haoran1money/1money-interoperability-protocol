@@ -29,27 +29,27 @@ pub async fn fetch_balance(client: &Client, address: Address, token: Address) ->
     }
 }
 
-/// Waits for the balance to increase above `initial_balance`.
-pub async fn wait_for_balance_increase(
+/// Waits for the balance to change from `initial_balance` and returns the new balance.
+pub async fn wait_for_balance_change(
     client: &Client,
     address: Address,
     token: Address,
     initial_balance: U256,
 ) -> Result<U256> {
     poll_with_timeout(
-        "balance increase",
+        "balance change",
         POLL_INTERVAL,
         MAX_DURATION,
         || async move {
             let balance = fetch_balance(client, address, token).await?;
-            if balance > initial_balance {
+            if balance != initial_balance {
                 return Ok(Some(balance));
             }
 
             debug!(
                 %initial_balance,
                 %balance,
-                "Balance has not increased yet, retrying"
+                "Balance has not changed yet, retrying"
             );
 
             Ok(None)

@@ -57,3 +57,32 @@ pub async fn wait_for_balance_increase(
     )
     .await
 }
+
+/// Waits for the balance to reach a specified amount.
+pub async fn wait_for_eventual_balance(
+    client: &Client,
+    address: Address,
+    token: Address,
+    expected_balance: U256,
+) -> Result<U256> {
+    poll_with_timeout(
+        "eventual balance",
+        POLL_INTERVAL,
+        MAX_DURATION,
+        || async move {
+            let balance = fetch_balance(client, address, token).await?;
+            if balance == expected_balance {
+                return Ok(Some(balance));
+            }
+
+            debug!(
+                %expected_balance,
+                %balance,
+                "Target balance not reached yet, retrying"
+            );
+
+            Ok(None)
+        },
+    )
+    .await
+}

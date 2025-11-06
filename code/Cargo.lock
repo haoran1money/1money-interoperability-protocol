@@ -2817,9 +2817,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "onemoney-protocol"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44d522831ca80f34c9979fe273d546d496e819d2f0ad3e1a404d72fe5254d714"
+checksum = "76e78577d3463aba99e942599cb02f80b87d488a556a1bff2eba9dacf1c4c38f"
 dependencies = [
  "alloy",
  "alloy-primitives",

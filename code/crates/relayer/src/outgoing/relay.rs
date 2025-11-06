@@ -1,6 +1,6 @@
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::OMInterop;
-use onemoney_protocol::{Client, Transaction, TxPayload};
+use onemoney_protocol::{Transaction, TxPayload};
 use tracing::{debug, error, info};
 
 use crate::config::Config;
@@ -36,14 +36,18 @@ pub async fn process_burn_and_bridge_transactions(
 
     let checkpoint_number = tx.checkpoint_number.ok_or(Error::MissingCheckpointNumber)?;
 
-    let client = Client::custom(config.one_money_node_url.to_string())?;
-    // TODO: Use get_account_bbnonce() once implemented
-    let bbnonce = client.get_account_nonce(sender).await?;
+    // TODO: Replace this with correct `bbnonce` once it is added to the `Transaction`
+    // We should validate the bbnonce from the burn transaction matches the bbnonce at side-chain.
+    let bbnonce = contract
+        .getLatestProcessedNonce(sender)
+        .call()
+        .block("pending".parse().unwrap())
+        .await?;
 
     let tx_receipt = contract
         .bridgeTo(
             sender,
-            bbnonce.nonce,
+            bbnonce,
             destination_address.parse()?,
             value.parse()?,
             destination_chain_id.try_into()?,

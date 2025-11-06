@@ -283,9 +283,9 @@ contract OMInterop is Ownable, IOMInterop {
     }
 
     function _enforceSequentialNonce(address account, uint64 bbNonce) internal {
-        uint64 expected = _latestBbNonce[account] + 1;
+        uint64 expected = _latestBbNonce[account];
         if (bbNonce != expected) revert InvalidNonce(bbNonce, expected);
-        _latestBbNonce[account] = bbNonce;
+        _latestBbNonce[account] = bbNonce + 1;
     }
 
     function _revertIfInvalidChain(uint32 chainId) internal pure {

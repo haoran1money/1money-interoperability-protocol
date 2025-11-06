@@ -96,27 +96,28 @@
             }
         },
         {
-            "hash": "0x05e0238f5f130a41d1102d9e532e338eac86f6d1bf427e39fb9e427598c64034",
-            "checkpoint_hash": "0x06a9d1306d4d79e880328be616b04b16d4dca7582b4cfedd83459e839b897035",
-            "checkpoint_number": 1,
-            "transaction_index": 4,
-            "recent_checkpoint": 0,
-            "chain_id": 1212101,
-            "from": "0x2d4c699936bcccbcde1ea12392b080181f17c2c2",
-            "nonce": 0,
+            "hash": "0x92fd5176d74576790eaa70028a059bcc9ef7d321132641494fab758d2f601540",
+            "checkpoint_hash": "0x4fb6f9ee2cb99e5ed9b4dda5edfc126e508ada77a8a3ac14a5eaa88df5017db7",
+            "checkpoint_number": 483,
+            "transaction_index": 0,
+            "recent_checkpoint": 482,
+            "chain_id": 3133,
+            "from": "0xefd86f9ea9b981eda887f984c7883481ec665b65",
+            "nonce": 21,
             "transaction_type": "TokenBurnAndBridge",
             "data": {
-                "value": "200000000",
-                "sender": "0xc7a8e117cb43d7935da4c30b9f9d0cdb5a372808",
+                "value": "10",
+                "sender": "0xd28b8c8398d91ff576a6c51df395365679537dc1",
                 "destination_chain_id": 1,
-                "destination_address": "0xc7a8e117cb43d7935da4c30b9f9d0cdb5a372808",
-                "escrow_fee": "1000",
-                "token": "0xf864012249f6843fbdc1eb0d55aff9252c09cef8"
+                "destination_address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+                "escrow_fee": "10",
+                "bridge_metadata": null,
+                "token": "0x9d8dc7d973171aed9442d9332bd8110f01e8e814"
             },
             "signature": {
-                "r": "0x197f31a5ab1492c2a06d29a419e49e0d8fc439ce6e61225babf66e6801e76668",
-                "s": "0x41f0a26800b13b7782267af56ebd467220c3d49f02834ff0420124b5aa2ac626",
-                "v": 1
+                "r": "0x9fa757dd8af2c95d121bda93ce097d96d690ad42a6f64f54da490280a3b19a4",
+                "s": "0x463524a6111e7a653b205e9eb25f763016f34cbdc8d5201cb30ad25e0c0d6200",
+                "v": 0
             }
         }
     ],

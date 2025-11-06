@@ -185,7 +185,7 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
     relayer_contract
         .bridgeTo(
             user_address,
-            1,
+            0,
             destination,
             U256::from(250u64),
             10,

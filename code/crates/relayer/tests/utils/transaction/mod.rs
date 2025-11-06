@@ -6,6 +6,7 @@ use tracing::{debug, warn};
 
 use crate::utils::{poll_with_timeout, MAX_DURATION, POLL_INTERVAL};
 
+pub mod burn_and_bridge;
 pub mod types;
 
 /// Polls a transaction hash until it confirms or tells us to resubmit.

@@ -1,4 +1,6 @@
-mod utils;
+pub mod utils;
+
+use core::time::Duration;
 
 use alloy_node_bindings::Anvil;
 use alloy_primitives::U256;
@@ -108,7 +110,7 @@ async fn ominterop_deposit_flow() -> Result<()> {
         relayer_private_key: relayer_wallet.clone(),
     };
 
-    spawn_relayer_and(config, || {
+    spawn_relayer_and(config, 0, Duration::from_secs(1), || {
         let deposit_amount = U256::from(500u64);
         let recipient = anvil.addresses()[6];
         let sc_token_contract = OMInterop::new(contract_addr, sc_token_provider.clone());

@@ -8,7 +8,9 @@ use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::Result;
 use onemoney_protocol::crypto::signing::sign_hash;
 use onemoney_protocol::responses::TransactionResponse;
-use onemoney_protocol::{Authority, AuthorityAction, Client, TokenAuthorityPayload};
+use onemoney_protocol::{
+    Authority, AuthorityAction, Client, TokenAuthorityPayload, TokenMintPayload,
+};
 use tracing::{debug, info, warn};
 
 use super::account::fetch_account_context;
@@ -104,6 +106,63 @@ impl<'a> OperationClient<'a> {
                             info!(%tx_hash, "Token issuance failed, retrying");
                             Ok(None)
                         }
+                    }
+                }
+            }
+        })
+        .await
+    }
+
+    pub async fn mint_token(
+        &self,
+        recipient: Address,
+        value: U256,
+        token: Address,
+    ) -> Result<TransactionResponse> {
+        let operator_address = PrivateKeySigner::from_str(self.private_key)?.address();
+        let chain_id = self.client.fetch_chain_id_from_network().await?;
+        let client = self.client;
+        let private_key = self.private_key;
+
+        poll_with_timeout("token mint_token", POLL_INTERVAL, MAX_DURATION, {
+            move || async move {
+                let (recent_checkpoint, nonce) =
+                    match fetch_account_context(client, operator_address).await {
+                        Ok(context) => context,
+                        Err(err) => {
+                            warn!(?err, "Failed to fetch operator context for token issuance");
+                            return Ok(None);
+                        }
+                    };
+
+                let payload = TokenMintPayload {
+                    recent_checkpoint,
+                    chain_id,
+                    nonce,
+                    recipient,
+                    value,
+                    token,
+                };
+
+                debug!("Submitting token mint request");
+
+                let response = match client.mint_token(payload, private_key).await {
+                    Ok(response) => response,
+                    Err(err) => {
+                        warn!(?err, "Token mint submission failed");
+                        return Ok(None);
+                    }
+                };
+
+                let tx_hash = response.hash.encode_hex_with_prefix();
+                match wait_for_transaction(client, &tx_hash, "token mint confirmation").await? {
+                    ControlFlow::Break(()) => {
+                        info!(%tx_hash, "Token mint confirmed");
+                        Ok(Some(response))
+                    }
+                    ControlFlow::Continue(()) => {
+                        info!(%tx_hash, "Token mint failed, retrying");
+                        Ok(None)
                     }
                 }
             }

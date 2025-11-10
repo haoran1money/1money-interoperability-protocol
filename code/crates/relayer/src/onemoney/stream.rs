@@ -6,16 +6,18 @@ use futures::StreamExt;
 use onemoney_protocol::{Transaction, TxPayload};
 use tokio::time::interval;
 use tracing::{debug, info};
-use url::Url;
 
+use crate::config::Config;
 use crate::onemoney::error::Error;
 use crate::onemoney::transaction::get_transactions_from_checkpoint;
 
 pub fn transaction_stream(
-    url: Url,
+    config: &Config,
     start_checkpoint: u64,
     poll_interval: Duration,
-) -> BoxStream<'static, Result<Vec<Transaction>, Error>> {
+) -> BoxStream<'static, Result<(u64, Vec<Transaction>), Error>> {
+    let config = config.clone();
+
     try_stream! {
         let mut interval = interval(poll_interval);
         let mut current_checkpoint_id = start_checkpoint;
@@ -24,15 +26,15 @@ pub fn transaction_stream(
             interval.tick().await;
 
             // TODO: This will be replaced by certified transactions
-            match get_transactions_from_checkpoint(url.to_string(), current_checkpoint_id, |tx| {
+            match get_transactions_from_checkpoint(config.one_money_node_url.to_string(), current_checkpoint_id, |tx| {
                 matches!(tx.data, TxPayload::TokenBurnAndBridge { .. })
             }).await {
                 Ok(transactions) => {
                     info!(checkpoint = current_checkpoint_id, "BurnAndBridge transactions extracted");
 
-                    current_checkpoint_id += 1;
+                    yield (current_checkpoint_id, transactions);
 
-                    yield transactions;
+                    current_checkpoint_id += 1;
                 },
                 Err(err) => {
                     // If the checkpoint doesn't exist it will return a 404 error, we just log and try again later

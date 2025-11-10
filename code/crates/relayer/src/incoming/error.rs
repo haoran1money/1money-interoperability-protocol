@@ -14,4 +14,12 @@ pub enum Error {
     MissingTransactionHash,
     #[error("Relayer account nonce mismatch: sidechain={sidechain}, layer1={layer1}")]
     NonceMismatch { sidechain: u64, layer1: u64 },
+    #[error(transparent)]
+    Contract(#[from] alloy_contract::Error),
+    #[error(transparent)]
+    RpcTransport(#[from] alloy_transport::RpcError<alloy_transport::TransportErrorKind>),
+    #[error("Contract reverted: {0:?}")]
+    ContractReverted(onemoney_interop::contract::OMInterop::OMInteropErrors),
+    #[error("Generic error: {0}")]
+    Generic(String),
 }

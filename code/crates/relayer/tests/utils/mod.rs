@@ -2,9 +2,11 @@ use core::future::Future;
 use core::time::Duration;
 
 use relayer::config::Config;
+use relayer::incoming::recovery::get_latest_incomplete_block_number;
 use relayer::incoming::relay_sc_events;
+use relayer::outgoing::recovery::get_earliest_incomplete_checkpoint_number;
 use relayer::outgoing::stream::relay_outgoing_events;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 pub mod account;
 pub mod operator;
@@ -45,7 +47,6 @@ where
 /// Starts a relayer task, runs `work`, and handles whichever finishes first.
 pub async fn spawn_relayer_and<F, Fut>(
     config: Config,
-    start_checkpoint: u64,
     poll_interval: Duration,
     work: F,
 ) -> Result<()>
@@ -56,7 +57,9 @@ where
     let mut relayer_incoming_task = tokio::spawn({
         let config = config.clone();
         async move {
-            let relayer_result = relay_sc_events(&config, 0).await;
+            let from_block = get_latest_incomplete_block_number(&config).await?;
+            info!(from_block = %from_block, "Will start incoming relayer task");
+            let relayer_result = relay_sc_events(&config, from_block).await;
             if let Err(err) = &relayer_result {
                 warn!(%err, "relayer side-chain event loop ended");
             }
@@ -67,6 +70,8 @@ where
     let mut relayer_outgoing_task = tokio::spawn({
         let config = config.clone();
         async move {
+            let start_checkpoint = get_earliest_incomplete_checkpoint_number(&config).await?;
+            info!(start_checkpoint = %start_checkpoint, "Will start outgoing relayer task");
             let relayer_result =
                 relay_outgoing_events(&config, start_checkpoint, poll_interval).await;
             if let Err(err) = &relayer_result {

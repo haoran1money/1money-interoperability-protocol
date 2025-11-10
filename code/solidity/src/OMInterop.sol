@@ -39,6 +39,7 @@ contract OMInterop is Ownable, IOMInterop {
     error InvalidNonce(uint64 provided, uint64 expected);
     error InboundNonceOverflow();
     error CheckpointAlreadyCompleted(uint64 checkpointId);
+    error CheckpointCompletedAndPruned(uint64 checkpointId);
     error InvalidChainId();
     error CheckpointCompleted(uint64 checkpointId);
     error NoCompletedCheckpoint();
@@ -185,13 +186,18 @@ contract OMInterop is Ownable, IOMInterop {
 
         tally.certified = burnAndBridgeCount;
 
-        _tryCompleteCheckpoint(checkpointId);
+        _tryPruneCheckpoint(checkpointId);
     }
 
     /// @inheritdoc IOMInterop
     function getLatestCompletedCheckpoint() external view override returns (uint64 checkpointId) {
         checkpointId = _earliestIncompletedCheckpoint;
-        if (checkpointId == 0) revert NoCompletedCheckpoint();
+        if (checkpointId == 0) {
+            if (_checkpointTallies[0].certified != 0) {
+                return 0;
+            }
+            revert NoCompletedCheckpoint();
+        }
 
         unchecked {
             checkpointId -= 1;
@@ -238,7 +244,7 @@ contract OMInterop is Ownable, IOMInterop {
 
     /// @inheritdoc IOMInterop
     function getLatestInboundNonce() external view override returns (uint64 nonce) {
-        nonce = _latestInboundNonceInternal();
+        nonce = _nextInboundNonce;
     }
 
     /// @inheritdoc IOMInterop
@@ -302,7 +308,7 @@ contract OMInterop is Ownable, IOMInterop {
     function _revertIfCheckpointComplete(uint64 checkpointId) internal view {
         CheckpointTally storage tally = _checkpointTallies[checkpointId];
         if (tally.certified != 0 && tally.completed >= tally.certified) {
-            revert CheckpointAlreadyCompleted(checkpointId);
+            revert CheckpointCompleted(checkpointId);
         }
     }
 
@@ -328,30 +334,39 @@ contract OMInterop is Ownable, IOMInterop {
     function _recordCheckpointProgress(uint64 checkpointId) internal {
         CheckpointTally storage tally = _checkpointTallies[checkpointId];
         tally.completed += 1;
-        _tryCompleteCheckpoint(checkpointId);
+        _tryPruneCheckpoint(checkpointId);
     }
 
-    function _tryCompleteCheckpoint(uint64 checkpointId) internal {
-        CheckpointTally storage tally = _checkpointTallies[checkpointId];
-        if (tally.certified == 0 || tally.completed < tally.certified) {
+    function _tryPruneCheckpoint(uint64 checkpointId) internal {
+        if (!_isCheckpointComplete(checkpointId)) {
             return;
         }
 
-        uint64 earliest = _earliestIncompletedCheckpoint;
-        if (checkpointId + 1 > earliest) {
-            if (earliest != 0) {
-                unchecked {
-                    delete _checkpointTallies[earliest - 1];
-                }
-            }
-
-            _earliestIncompletedCheckpoint = checkpointId + 1;
+        if (
+            _earliestIncompletedCheckpoint == 0
+                && _checkpointTallies[0].certified == 0
+                && checkpointId != 0
+        ) {
+            _earliestIncompletedCheckpoint = checkpointId;
         }
+
+        while (_isCheckpointComplete(_earliestIncompletedCheckpoint)) {
+            uint64 finished = _earliestIncompletedCheckpoint;
+            delete _checkpointTallies[finished];
+            unchecked {
+                _earliestIncompletedCheckpoint = finished + 1;
+            }
+        }
+    }
+
+    function _isCheckpointComplete(uint64 checkpointId) internal view returns (bool) {
+        CheckpointTally storage tally = _checkpointTallies[checkpointId];
+        return tally.certified != 0 && tally.completed >= tally.certified;
     }
 
     function _ensureCheckpointNotCompleted(uint64 checkpointId) internal view {
         if (checkpointId < _earliestIncompletedCheckpoint) {
-            revert CheckpointCompleted(checkpointId);
+            revert CheckpointCompletedAndPruned(checkpointId);
         }
     }
 

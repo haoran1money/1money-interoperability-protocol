@@ -8,6 +8,7 @@ use crate::config::Config;
 
 pub mod error;
 mod handlers;
+pub mod recovery;
 
 use error::Error as IncomingError;
 use handlers::Relayer1MoneyContext;
@@ -62,17 +63,19 @@ pub async fn relay_sc_events(
                     "Handling OMInteropReceived event"
                 );
 
-                let response = relayer_ctx
-                    .handle_om_interop_received(inner, tx_hash)
-                    .await?;
+                if relayer_ctx.should_process_nonce(inner.nonce).await? {
+                    let response = relayer_ctx
+                        .handle_om_interop_received(inner, tx_hash)
+                        .await?;
 
-                info!(
-                    ?block_number,
-                    ?log_index,
-                    ?tx_hash,
-                    relayer_tx_hash = ?response.hash,
-                    "Submitted bridge_and_mint transaction to 1Money"
-                );
+                    info!(
+                        ?block_number,
+                        ?log_index,
+                        ?tx_hash,
+                        relayer_tx_hash = ?response.hash,
+                        "Submitted bridge_and_mint transaction to 1Money"
+                    );
+                }
             }
             OMInterop::OMInteropEvents::OMInteropSent(inner) => {
                 info!(
@@ -97,15 +100,17 @@ pub async fn relay_sc_events(
                     );
                 }
 
-                let response = relayer_ctx.handle_om_interop_sent(inner).await?;
+                if relayer_ctx.should_process_nonce(inner.nonce).await? {
+                    let response = relayer_ctx.handle_om_interop_sent(inner).await?;
 
-                info!(
-                    ?block_number,
-                    ?log_index,
-                    ?tx_hash,
-                    relayer_tx_hash = ?response.hash,
-                    "Submitted refund payment transaction to 1Money"
-                );
+                    info!(
+                        ?block_number,
+                        ?log_index,
+                        ?tx_hash,
+                        relayer_tx_hash = ?response.hash,
+                        "Submitted refund payment transaction to 1Money"
+                    );
+                }
             }
             OMInterop::OMInteropEvents::OperatorUpdated(inner) => {
                 warn!(

@@ -11,6 +11,10 @@ pub enum Error {
     InvalidValidatorKey { address: Address },
     #[error("Failed to query 1Money: {0}")]
     FailedQuery(#[from] onemoney_protocol::Error),
+    #[error("Pending transaction failed: {0}")]
+    PendingTransaction(#[from] alloy_provider::PendingTransactionError),
+    #[error("Contract call failed: {0}")]
+    ContractCall(#[from] alloy_contract::Error),
     #[error("Failed: {0}")]
     Generic(String),
 }

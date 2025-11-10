@@ -5,7 +5,7 @@ use onemoney_interop::contract::OMInterop::{OMInteropReceived, OMInteropSent};
 use onemoney_protocol::client::http::Client;
 use onemoney_protocol::responses::TransactionResponse;
 use onemoney_protocol::{PaymentPayload, TokenBridgeAndMintPayload};
-use tracing::error;
+use tracing::{debug, warn};
 
 use crate::incoming::error::Error as IncomingError;
 
@@ -37,26 +37,52 @@ impl<'a> Relayer1MoneyContext<'a> {
         &self.private_key_hex
     }
 
-    async fn validate_nonce(&self, sidechain_nonce: u64) -> Result<(), IncomingError> {
-        let layer1_nonce = self
+    pub async fn should_process_nonce(&self, sidechain_nonce: u64) -> Result<bool, IncomingError> {
+        let om_nonce = self
             .client
             .get_account_nonce(self.relayer_address)
             .await?
             .nonce;
 
-        if layer1_nonce != sidechain_nonce {
-            error!(
+        if om_nonce > sidechain_nonce {
+            warn!(
                 %sidechain_nonce,
-                %layer1_nonce,
-                "Nonce mismatch"
+                %om_nonce,
+                "Layer 1 probably processed this nonce already: skip"
             );
-            return Err(IncomingError::NonceMismatch {
-                sidechain: sidechain_nonce,
-                layer1: layer1_nonce,
-            });
+            Ok(false)
+        } else if om_nonce < sidechain_nonce {
+            warn!(
+                %sidechain_nonce,
+                %om_nonce,
+                "Layer 1 probably didn't process old nonces yet: could-wait-but-submit-to-mempool-anyway"
+            );
+            // TODO: Temporary workaround
+            loop {
+                let current_nonce = self
+                    .client
+                    .get_account_nonce(self.relayer_address)
+                    .await?
+                    .nonce;
+                if current_nonce == sidechain_nonce {
+                    debug!(
+                        %sidechain_nonce,
+                        %current_nonce,
+                        "Nonce match: right-on-time"
+                    );
+                    break;
+                }
+                tokio::time::sleep(core::time::Duration::from_millis(10)).await;
+            }
+            Ok(true)
+        } else {
+            debug!(
+                %sidechain_nonce,
+                %om_nonce,
+                "Nonce match: right-on-time"
+            );
+            Ok(true)
         }
-
-        Ok(())
     }
 
     pub async fn handle_om_interop_received(
@@ -70,8 +96,6 @@ impl<'a> Relayer1MoneyContext<'a> {
         }: OMInteropReceived,
         source_tx_hash: B256,
     ) -> Result<TransactionResponse, IncomingError> {
-        self.validate_nonce(sidechain_nonce).await?;
-
         let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
 
         let payload = TokenBridgeAndMintPayload {
@@ -102,8 +126,6 @@ impl<'a> Relayer1MoneyContext<'a> {
             dstChainId: _dst_chain_id,
         }: OMInteropSent,
     ) -> Result<TransactionResponse, IncomingError> {
-        self.validate_nonce(sidechain_nonce).await?;
-
         let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
 
         let payload = PaymentPayload {

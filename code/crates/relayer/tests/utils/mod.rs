@@ -67,13 +67,16 @@ where
         }
     });
 
+    let relayer_nonce = config.sidechain_relayer_nonce().await?;
+
     let mut relayer_outgoing_task = tokio::spawn({
         let config = config.clone();
         async move {
             let start_checkpoint = get_earliest_incomplete_checkpoint_number(&config).await?;
             info!(start_checkpoint = %start_checkpoint, "Will start outgoing relayer task");
             let relayer_result =
-                relay_outgoing_events(&config, start_checkpoint, poll_interval).await;
+                relay_outgoing_events(&config, relayer_nonce, start_checkpoint, poll_interval)
+                    .await;
             if let Err(err) = &relayer_result {
                 warn!(%err, "relayer 1Money event loop ended");
             }

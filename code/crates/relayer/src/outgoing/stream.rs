@@ -4,13 +4,14 @@ use futures::TryStreamExt;
 use humantime::format_duration;
 use tracing::{debug, error, info};
 
-use crate::config::Config;
+use crate::config::{Config, RelayerNonce};
 use crate::onemoney::stream::transaction_stream;
 use crate::outgoing::error::Error;
 use crate::outgoing::relay::{process_burn_and_bridge_transactions, process_checkpoint_info};
 
 pub async fn relay_outgoing_events(
     config: &Config,
+    relayer_nonce: RelayerNonce,
     start_checkpoint: u64,
     poll_interval: Duration,
 ) -> Result<(), Error> {
@@ -42,10 +43,16 @@ pub async fn relay_outgoing_events(
         );
         debug!(?transactions, "transactions details");
 
-        process_checkpoint_info(config, current_checkpoint_id, transactions.len() as u32).await?;
+        process_checkpoint_info(
+            config,
+            relayer_nonce.clone(),
+            current_checkpoint_id,
+            transactions.len() as u32,
+        )
+        .await?;
 
         for tx in transactions {
-            process_burn_and_bridge_transactions(config, tx)
+            process_burn_and_bridge_transactions(config, relayer_nonce.clone(), tx)
                 .await
                 .inspect_err(|err| {
                     error!("Failed processing burn and bridge transaction stream: {err:?}");

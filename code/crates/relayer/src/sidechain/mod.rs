@@ -1,4 +1,5 @@
 pub mod error;
+use core::sync::atomic::Ordering;
 use std::collections::HashSet;
 
 use alloy_provider::ProviderBuilder;
@@ -6,11 +7,12 @@ use tracing::{debug, info};
 use validator_manager::ValidatorManager::{self, Secp256k1Key, ValidatorInfo};
 use validator_manager::CONTRACT_ADDRESS;
 
-use crate::config::Config;
+use crate::config::{Config, RelayerNonce};
 use crate::sidechain::error::Error as SideChainError;
 
 pub async fn process_new_validator_set(
     config: &Config,
+    relayer_nonce: RelayerNonce,
     new_validators: Vec<ValidatorInfo>,
 ) -> Result<(), SideChainError> {
     let provider = ProviderBuilder::new()
@@ -39,6 +41,7 @@ pub async fn process_new_validator_set(
     // Send transaction to update validator set
     let tx_receipt = contract
         .addAndRemove(add_validators, remove_validator_keys)
+        .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
         .await?
         .get_receipt()

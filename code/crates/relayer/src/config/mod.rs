@@ -1,6 +1,15 @@
+use core::sync::atomic::AtomicU64;
+use std::sync::Arc;
+
 use alloy_primitives::Address;
+use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
 use url::Url;
+pub mod error;
+
+use error::Error as ConfigError;
+
+pub type RelayerNonce = Arc<AtomicU64>;
 
 #[derive(clap::Args, Clone)]
 pub struct Config {
@@ -16,4 +25,15 @@ pub struct Config {
     /// Private key of the relayer account
     #[arg(long, env = "RELAYER_PRIVATE_KEY")]
     pub relayer_private_key: PrivateKeySigner,
+}
+
+impl Config {
+    /// Builds a shared relayer nonce by querying the sidechain for the latest.
+    pub async fn sidechain_relayer_nonce(&self) -> Result<RelayerNonce, ConfigError> {
+        let nonce = ProviderBuilder::new()
+            .connect_http(self.side_chain_node_url.clone())
+            .get_transaction_count(self.relayer_private_key.address())
+            .await?;
+        Ok(Arc::new(AtomicU64::new(nonce)))
+    }
 }

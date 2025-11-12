@@ -28,7 +28,7 @@ pub enum Commands {
         poll_interval: Duration,
     },
     /// Relay sidechain interoperability events into 1Money
-    SideChain {
+    Sidechain {
         #[arg(
             long,
             help = "Starting block number on the sidechain to scan for events (inclusive). If no value is given the number will be computed."
@@ -36,7 +36,7 @@ pub enum Commands {
         from_block: Option<u64>,
     },
     /// Relay 1Money interoperability events into Sidechain
-    OneMoney {
+    Onemoney {
         #[arg(
             long,
             help = "Starting checkpoint number on 1Money to scan for events (inclusive)"
@@ -55,6 +55,9 @@ pub enum Commands {
 impl Cli {
     pub async fn run(self) -> Result<(), crate::error::Error> {
         let Self { config, command } = self;
+
+        let sidechain_relayer_nonce = config.sidechain_relayer_nonce().await?;
+
         match command {
             Commands::ProofOfAuthority { poll_interval } => {
                 info!(
@@ -63,9 +66,14 @@ impl Cli {
                     config.one_money_node_url,
                     config.side_chain_node_url
                 );
-                crate::poa::relay_poa_events(&config, poll_interval).await?;
+                crate::poa::relay_poa_events(
+                    &config,
+                    sidechain_relayer_nonce.clone(),
+                    poll_interval,
+                )
+                .await?;
             }
-            Commands::SideChain { from_block } => {
+            Commands::Sidechain { from_block } => {
                 let from_block = if let Some(block_number) = from_block {
                     block_number
                 } else {
@@ -78,16 +86,9 @@ impl Cli {
                     config.side_chain_node_url,
                     config.one_money_node_url
                 );
-                info!(
-                    ?config.interop_contract_address,
-                    from_block,
-                    "Relaying SC events from {} to {}",
-                    config.side_chain_node_url,
-                    config.one_money_node_url
-                );
                 crate::incoming::relay_sc_events(&config, from_block).await?;
             }
-            Commands::OneMoney {
+            Commands::Onemoney {
                 start_checkpoint,
                 poll_interval,
             } => {
@@ -111,6 +112,7 @@ impl Cli {
                 );
                 crate::outgoing::stream::relay_outgoing_events(
                     &config,
+                    sidechain_relayer_nonce.clone(),
                     start_checkpoint,
                     poll_interval,
                 )

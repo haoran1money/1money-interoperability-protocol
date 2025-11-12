@@ -194,6 +194,8 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
         relayer_private_key: relayer_wallet.clone(),
     };
 
+    let relayer_nonce = config.sidechain_relayer_nonce().await?;
+
     let relayer_provider = ProviderBuilder::new()
         .wallet(relayer_wallet.clone())
         .connect_http(http_endpoint.clone());
@@ -256,7 +258,7 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
     let handler = {
         let config_owned = config.clone();
         tokio::spawn(async move {
-            relay_outgoing_events(&config_owned, 0, Duration::from_secs(1)).await
+            relay_outgoing_events(&config_owned, relayer_nonce, 0, Duration::from_secs(1)).await
         })
     };
 

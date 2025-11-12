@@ -1,13 +1,16 @@
+use core::sync::atomic::Ordering;
+
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::OMInterop;
 use onemoney_protocol::{Transaction, TxPayload};
 use tracing::{debug, info};
 
-use crate::config::Config;
+use crate::config::{Config, RelayerNonce};
 use crate::outgoing::error::Error;
 
 pub async fn process_checkpoint_info(
     config: &Config,
+    relayer_nonce: RelayerNonce,
     current_checkpoint_id: u64,
     transaction_count: u32,
 ) -> Result<(), Error> {
@@ -19,6 +22,7 @@ pub async fn process_checkpoint_info(
 
     let tx_receipt = contract
         .updateCheckpointInfo(current_checkpoint_id, transaction_count)
+        .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
         .await
         .map(Ok)
@@ -42,6 +46,7 @@ pub async fn process_checkpoint_info(
 /// This function expects a TokenBurnAndBridge transaction and extracts necessary details to call the contract method.
 pub async fn process_burn_and_bridge_transactions(
     config: &Config,
+    relayer_nonce: RelayerNonce,
     tx: Transaction,
 ) -> Result<(), Error> {
     let provider = ProviderBuilder::new()
@@ -86,6 +91,7 @@ pub async fn process_burn_and_bridge_transactions(
             token,
             checkpoint_number,
         )
+        .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
         .await
         .map(Ok)

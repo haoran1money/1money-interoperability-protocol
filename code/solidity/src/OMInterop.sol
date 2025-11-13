@@ -32,6 +32,16 @@ contract OMInterop is Ownable, IOMInterop {
         uint64 checkpointId;
     }
 
+    struct RateLimitParam {
+        uint256 limit;
+        uint256 window;
+    }
+
+    struct RateLimitData {
+        uint256 amountInFlight;
+        uint256 lastEpoch;
+    }
+
     error Unauthorized();
     error InvalidAddress();
     error InvalidAmount();
@@ -44,6 +54,7 @@ contract OMInterop is Ownable, IOMInterop {
     error CheckpointCompleted(uint64 checkpointId);
     error NoCompletedCheckpoint();
     error InboundNonceUnavailable();
+    error RateLimitExceeded();
 
     /// @notice Temporary constant for the source chain identifier.
     uint32 internal constant SRC_CHAIN_ID = 1;
@@ -60,12 +71,17 @@ contract OMInterop is Ownable, IOMInterop {
     mapping(address => TokenBinding) private _tokensByOm;
     mapping(address => uint64) private _latestBbNonce;
     mapping(uint64 => CheckpointTally) private _checkpointTallies;
+    mapping(address token => RateLimitParam limit) public rateLimitsParam;
+    mapping(address token => RateLimitData limit) public rateLimitsData;
 
     /// @notice Emitted when the operator address changes.
     event OperatorUpdated(address indexed newOperator);
 
     /// @notice Emitted when the relayer address changes.
     event RelayerUpdated(address indexed newRelayer);
+
+    /// @notice Emitted when the rate limit changed for a token.
+    event RateLimitsChanged(address token, uint256 limit, uint256 window);
 
     /// @notice Sets the initial owner, operator, and relayer.
     /// @param owner_ Address that will own the contract.
@@ -79,6 +95,7 @@ contract OMInterop is Ownable, IOMInterop {
     {
         operator = operator_;
         relayer = relayer_;
+
         emit OperatorUpdated(operator_);
         emit RelayerUpdated(relayer_);
     }
@@ -147,6 +164,9 @@ contract OMInterop is Ownable, IOMInterop {
         recordInboundNonce
     {
         TokenBinding storage binding = _tokensBySidechain[msg.sender];
+        // Enforce inflow limit
+        _checkAndUpdateRateLimit(binding.omToken, amount);
+
         emit OMInteropReceived(_latestInboundNonceInternal(), to, amount, binding.omToken, SRC_CHAIN_ID);
     }
 
@@ -212,9 +232,8 @@ contract OMInterop is Ownable, IOMInterop {
         nonZeroAddress(omToken)
         nonZeroAddress(scToken)
     {
-        TokenBinding memory binding = TokenBinding({
-            omToken: omToken, scToken: scToken, interopProtoId: interopProtoId, exists: true
-        });
+        TokenBinding memory binding =
+            TokenBinding({omToken: omToken, scToken: scToken, interopProtoId: interopProtoId, exists: true});
 
         _tokensBySidechain[scToken] = binding;
         _tokensByOm[omToken] = binding;
@@ -342,11 +361,7 @@ contract OMInterop is Ownable, IOMInterop {
             return;
         }
 
-        if (
-            _earliestIncompletedCheckpoint == 0
-                && _checkpointTallies[0].certified == 0
-                && checkpointId != 0
-        ) {
+        if (_earliestIncompletedCheckpoint == 0 && _checkpointTallies[0].certified == 0 && checkpointId != 0) {
             _earliestIncompletedCheckpoint = checkpointId;
         }
 
@@ -378,5 +393,50 @@ contract OMInterop is Ownable, IOMInterop {
         unchecked {
             return next - 1;
         }
+    }
+
+    function setRateLimit(address token, uint256 limit, uint256 window) external onlyOperator {
+        _setRateLimit(token, limit, window);
+    }
+
+    function _setRateLimit(address token, uint256 limit, uint256 window) internal {
+        // Clear rate limit if window is 0
+        if (window == 0) {
+            delete rateLimitsParam[token];
+            delete rateLimitsData[token];
+            emit RateLimitsChanged(token, limit, window);
+            return;
+        }
+
+        RateLimitParam storage rl_param = rateLimitsParam[token];
+        RateLimitData storage rl_data = rateLimitsData[token];
+
+        rl_param.limit = limit;
+        rl_param.window = window;
+
+        rl_data.amountInFlight = 0;
+        rl_data.lastEpoch = block.timestamp / rl_param.window;
+        emit RateLimitsChanged(token, limit, window);
+    }
+
+    function _checkAndUpdateRateLimit(address token, uint256 _amount) internal virtual {
+        RateLimitParam storage rl_param = rateLimitsParam[token];
+        RateLimitData storage rl_data = rateLimitsData[token];
+
+        // A windows configured as 0 means no rate limiting
+        if (rl_param.window == 0) return;
+
+        uint256 currentEpoch = block.timestamp / rl_param.window;
+
+        if (currentEpoch > rl_data.lastEpoch) {
+            rl_data.amountInFlight = 0;
+            rl_data.lastEpoch = currentEpoch;
+        }
+
+        if (rl_data.amountInFlight + _amount > rl_param.limit) {
+            revert RateLimitExceeded();
+        }
+
+        rl_data.amountInFlight += _amount;
     }
 }

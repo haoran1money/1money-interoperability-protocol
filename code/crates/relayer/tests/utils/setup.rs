@@ -88,8 +88,22 @@ async fn setup_e2e_test_context() -> Result<E2ETestContext> {
     )
     .await?;
     let contract_addr = *contract.address();
-    OMInterop::new(contract_addr, operator_provider)
+    let operator_contract = OMInterop::new(contract_addr, operator_provider);
+
+    operator_contract
         .mapTokenAddresses(token_address, sc_token_wallet.address(), 1)
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+
+    // Set rate limit to 5_000_000_000 tokens per hour
+    operator_contract
+        .setRateLimit(
+            token_address,
+            U256::from(5_000_000_000_u64),
+            U256::from(3600),
+        )
         .send()
         .await?
         .get_receipt()

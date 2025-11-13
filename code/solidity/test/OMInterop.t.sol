@@ -17,6 +17,9 @@ contract OMInteropTest is Test {
     function setUp() public {
         vm.prank(OWNER);
         interop = new OMInterop(OWNER, OPERATOR, RELAYER);
+        // 10'000 tokens every hour
+        vm.prank(OPERATOR);
+        interop.setRateLimit(OM_TOKEN, 10_000, 3600);
     }
 
     function testInitialRoles() public view {
@@ -343,5 +346,77 @@ contract OMInteropTest is Test {
         vm.expectRevert(abi.encodeWithSignature("CheckpointCompletedAndPruned(uint64)", checkpointId));
         vm.prank(RELAYER);
         interop.bridgeTo(address(0xCA), 1, address(0xFE), 1, 1, 1, OM_TOKEN, checkpointId);
+    }
+
+    function testRateLimitExceeded() public {
+        vm.prank(OPERATOR);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+
+        uint32 chainId = 1;
+
+        vm.prank(OPERATOR);
+        interop.setRateLimit(OM_TOKEN, 100, 60);
+
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropReceived(0, address(0x99), 80, OM_TOKEN, chainId);
+
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x99), 80);
+
+        vm.expectRevert(abi.encodeWithSignature("RateLimitExceeded()"));
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x98), 30);
+
+        // simulate waiting 1 minute
+        vm.warp(block.timestamp + 360);
+
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropReceived(1, address(0x98), 30, OM_TOKEN, chainId);
+
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x98), 30);
+
+        assertEq(interop.getLatestInboundNonce(), 2, "inbound nonce mismatch");
+    }
+
+    function testDisabledRateLimit() public {
+        vm.prank(OPERATOR);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+
+        uint32 chainId = 1;
+
+        // Step 0 -- set rate limit to 100 tokens per minute
+        vm.prank(OPERATOR);
+        interop.setRateLimit(OM_TOKEN, 100, 60);
+
+        // Step 1 -- exceed rate limit by trying to bridge 110 tokens within the window
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropReceived(0, address(0x99), 80, OM_TOKEN, chainId);
+
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x99), 80);
+
+        vm.expectRevert(abi.encodeWithSignature("RateLimitExceeded()"));
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x98), 30);
+
+        // Step 2 -- disable rate limiting by setting window=0
+        vm.prank(OPERATOR);
+        interop.setRateLimit(OM_TOKEN, 100, 0);
+
+        // Step 3 -- transfer 110 tokens successfully in two calls
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropReceived(1, address(0x99), 80, OM_TOKEN, chainId);
+
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x99), 80);
+
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropReceived(2, address(0x98), 30, OM_TOKEN, chainId);
+
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x98), 30);
+
+        assertEq(interop.getLatestInboundNonce(), 3, "inbound nonce mismatch");
     }
 }

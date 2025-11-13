@@ -143,6 +143,18 @@ pub async fn relay_sc_events(
                     "Ignoring OwnershipTransferred event"
                 );
             }
+            OMInterop::OMInteropEvents::RateLimitsChanged(inner) => {
+                warn!(
+                    ?block_number,
+                    ?log_index,
+                    ?tx_hash,
+                    address = ?log.address,
+                    token = ?inner.token,
+                    limit = ?inner.limit,
+                    window = ?inner.window,
+                    "Ignoring RateLimitsChanged event"
+                );
+            }
         }
     }
 

@@ -117,6 +117,23 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
         _ => panic!("unexpected relayer event variant"),
     }
 
+    operator_contract
+        .setRateLimit(om_token, U256::from(10000), U256::from(3600))
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+    debug!("setRateLimit transaction confirmed");
+
+    let updated_rate_limit = next_event(&mut stream).await;
+    debug!("received updated_rate_limit event");
+    match updated_rate_limit {
+        OMInterop::OMInteropEvents::RateLimitsChanged(event) => {
+            info!(?event, "rate limit updated");
+        }
+        ev => panic!("unexpected operator update event: {ev:?}"),
+    }
+
     let owner_contract = OMInterop::new(contract_addr, owner_provider.clone());
     owner_contract
         .setOperator(new_operator)

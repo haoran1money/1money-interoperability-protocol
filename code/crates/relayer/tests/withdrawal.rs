@@ -2,17 +2,15 @@ pub mod utils;
 
 use core::time::Duration;
 
-use alloy_node_bindings::Anvil;
 use alloy_primitives::hex::ToHexExt;
 use alloy_primitives::U256;
-use alloy_provider::{Provider, ProviderBuilder};
-use alloy_rpc_types_eth::TransactionRequest;
+use alloy_provider::ProviderBuilder;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::Result;
 use onemoney_interop::contract::OMInterop;
-use onemoney_protocol::{Authority, Client, PaymentPayload};
+use onemoney_protocol::{Client, PaymentPayload};
 use relayer::config::Config;
-use tracing::{debug, info};
+use tracing::info;
 use utils::operator::{OperationClient, OPERATOR_PRIVATE_KEY};
 
 use crate::utils::account::{fetch_balance, wait_for_eventual_balance};
@@ -22,99 +20,42 @@ use crate::utils::transaction::burn_and_bridge::burn_and_bridge;
 
 const ONE_MONEY_BASE_URL: &str = "http://127.0.0.1:18555";
 
+#[rstest::rstest]
 #[tokio::test]
 #[test_log::test]
 #[ignore = "Requires local Anvil node and 1Money API at http://127.0.0.1:18555"]
-async fn test_withdrawal() -> Result<()> {
-    let anvil = Anvil::new().try_spawn()?;
-    let http_endpoint = anvil.endpoint_url();
-    let ws_endpoint = anvil.ws_endpoint_url();
-
-    debug!(%http_endpoint, %ws_endpoint, "Started Anvil node for testing");
+async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<()> {
+    let e2e_test_context = e2e_test_context.await;
+    let E2ETestContext {
+        anvil,
+        relayer_wallet,
+        sc_token_wallet,
+        token_address,
+        contract_addr,
+        onemoney_client,
+        ..
+    } = e2e_test_context;
 
     let keys = anvil.keys();
-    let admin_wallet: PrivateKeySigner = keys[0].clone().into();
-    let relayer_wallet: PrivateKeySigner = keys[1].clone().into();
-    let sc_token_wallet: PrivateKeySigner = keys[2].clone().into();
+    let http_endpoint = anvil.endpoint_url();
 
-    let operator_wallet: PrivateKeySigner = OPERATOR_PRIVATE_KEY.parse()?;
-
-    let operator_addr = operator_wallet.address();
-    let admin_addr = admin_wallet.address();
-    let relayer_addr = relayer_wallet.address();
     let sc_token_addr = sc_token_wallet.address();
-
-    let admin_provider = ProviderBuilder::new()
-        .wallet(admin_wallet)
-        .connect_http(http_endpoint.clone());
-    let operator_provider = ProviderBuilder::new()
-        .wallet(operator_wallet)
-        .connect_http(http_endpoint.clone());
-
-    admin_provider
-        .send_transaction(TransactionRequest {
-            to: Some(operator_addr.into()),
-            value: Some(U256::from(10_000_000_000_000_000_000_u64)), // 10 ETH
-            ..Default::default()
-        })
-        .await?
-        .get_receipt()
-        .await?;
-
-    let contract = OMInterop::deploy(
-        admin_provider.clone(),
-        admin_addr,
-        operator_addr,
-        relayer_addr,
-    )
-    .await?;
-    let contract_addr = *contract.address();
-    let operator_contract = OMInterop::new(contract_addr, operator_provider.clone());
-
-    let onemoney_client = Client::custom(ONE_MONEY_BASE_URL.to_string())?;
-    let operator_client = OperationClient::new(&onemoney_client, OPERATOR_PRIVATE_KEY);
-
-    let symbol = format!(
-        "OMTST{:x}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)?
-            .as_secs()
-    );
-    let name = "Interop Test Token";
-    let decimals = 6_u8;
-
-    let one_money_token = operator_client
-        .issue_new_token(symbol.as_str(), name, decimals)
-        .await?;
-
-    let token_authority_response = operator_client
-        .grant_authority(Authority::Bridge, relayer_addr, one_money_token, U256::MAX)
-        .await?;
-
-    debug!(
-        ?token_authority_response,
-        "Granted token Bridge rights to relayer"
-    );
-
-    operator_contract
-        .mapTokenAddresses(one_money_token, sc_token_addr, 1)
-        .send()
-        .await?
-        .get_receipt()
-        .await?;
+    let relayer_addr = relayer_wallet.address();
 
     let sender_wallet: PrivateKeySigner = keys[6].clone().into();
     let sender = sender_wallet.address();
     let recipient = anvil.addresses()[7];
 
+    let operator_client = OperationClient::new(&onemoney_client, OPERATOR_PRIVATE_KEY);
+
     operator_client
-        .mint_token(sender, U256::from(10000000), one_money_token)
+        .mint_token(sender, U256::from(10000000), token_address)
         .await?;
 
     // TODO: Temporary solution adds tokens to the relayer account until
     // fees are correctly transferred by 1Money
     operator_client
-        .mint_token(relayer_addr, U256::from(10000000), one_money_token)
+        .mint_token(relayer_addr, U256::from(10000000), token_address)
         .await?;
 
     let config = Config {
@@ -123,6 +64,11 @@ async fn test_withdrawal() -> Result<()> {
         interop_contract_address: contract_addr,
         relayer_private_key: relayer_wallet.clone(),
     };
+
+    let relayer_provider = ProviderBuilder::new()
+        .wallet(relayer_wallet.clone())
+        .connect_http(http_endpoint.clone());
+    let relayer_contract = OMInterop::new(contract_addr, relayer_provider);
 
     spawn_relayer_and(config.clone(), Duration::from_secs(1), || {
         let transfer_amount_1 = U256::from(500u64);
@@ -136,15 +82,15 @@ async fn test_withdrawal() -> Result<()> {
         async move {
             // First deposit
             let sender_balance_before_tx =
-                fetch_balance(&onemoney_client, sender, one_money_token).await?;
+                fetch_balance(&onemoney_client, sender, token_address).await?;
             let recipient_balance_before_tx =
-                fetch_balance(&onemoney_client, recipient, one_money_token).await?;
+                fetch_balance(&onemoney_client, recipient, token_address).await?;
 
             info!(
                 amount = %transfer_amount_1,
                 ?sender,
                 ?sc_token_addr,
-                ?one_money_token,
+                ?token_address,
                 "Invoking payment in 1Money"
             );
 
@@ -158,7 +104,7 @@ async fn test_withdrawal() -> Result<()> {
                 nonce: sender_nonce,
                 recipient,
                 value: transfer_amount_1,
-                token: one_money_token,
+                token: token_address,
             };
 
             onemoney_client
@@ -168,7 +114,7 @@ async fn test_withdrawal() -> Result<()> {
             let sender_balance = wait_for_eventual_balance(
                 &onemoney_client,
                 sender,
-                one_money_token,
+                token_address,
                 sender_balance_before_tx - transfer_amount_1,
             )
             .await?;
@@ -176,7 +122,7 @@ async fn test_withdrawal() -> Result<()> {
             let recipient_balance = wait_for_eventual_balance(
                 &onemoney_client,
                 recipient,
-                one_money_token,
+                token_address,
                 recipient_balance_before_tx + transfer_amount_1,
             )
             .await?;
@@ -189,8 +135,7 @@ async fn test_withdrawal() -> Result<()> {
             );
 
             // First withdrawal
-            let balance_before_tx =
-                fetch_balance(&onemoney_client, sender, one_money_token).await?;
+            let balance_before_tx = fetch_balance(&onemoney_client, sender, token_address).await?;
             let bbnonce_before_tx = onemoney_client.get_account_bbonce(sender).await?;
 
             burn_and_bridge(
@@ -198,7 +143,7 @@ async fn test_withdrawal() -> Result<()> {
                 sender_wallet.clone(),
                 1,
                 recipient,
-                one_money_token,
+                token_address,
                 withdrawal_amount_1,
                 fee_amount,
             )
@@ -219,7 +164,11 @@ async fn test_withdrawal() -> Result<()> {
             // Assert the bridgeTo was processed by verifying that the bbNonce was incremented
             tokio::time::timeout(core::time::Duration::from_secs(20), async {
                 loop {
-                    if contract.getLatestProcessedNonce(sender).call().await? == new_bbnonce.bbnonce
+                    if relayer_contract
+                        .getLatestProcessedNonce(sender)
+                        .call()
+                        .await?
+                        == new_bbnonce.bbnonce
                     {
                         break Ok::<_, color_eyre::eyre::Report>(());
                     }
@@ -230,7 +179,7 @@ async fn test_withdrawal() -> Result<()> {
 
             tokio::time::timeout(core::time::Duration::from_secs(20), async {
                 loop {
-                    if contract.getLatestInboundNonce().call().await?
+                    if relayer_contract.getLatestInboundNonce().call().await?
                         == onemoney_client.get_account_nonce(relayer_addr).await?.nonce
                     {
                         break Ok::<_, color_eyre::eyre::Report>(());
@@ -243,7 +192,7 @@ async fn test_withdrawal() -> Result<()> {
             let target_balance = wait_for_eventual_balance(
                 &onemoney_client,
                 sender,
-                one_money_token,
+                token_address,
                 balance_before_tx - withdrawal_amount_1 + fee_amount,
             )
             .await?;
@@ -255,15 +204,14 @@ async fn test_withdrawal() -> Result<()> {
             );
 
             // Second withdrawal
-            let balance_before_tx =
-                fetch_balance(&onemoney_client, sender, one_money_token).await?;
+            let balance_before_tx = fetch_balance(&onemoney_client, sender, token_address).await?;
             let bbnonce_before_tx = onemoney_client.get_account_bbonce(sender).await?;
             burn_and_bridge(
                 client_url,
                 sender_wallet.clone(),
                 1,
                 recipient,
-                one_money_token,
+                token_address,
                 withdrawal_amount_2,
                 fee_amount,
             )
@@ -284,7 +232,11 @@ async fn test_withdrawal() -> Result<()> {
             // Assert the bridgeTo was processed by verifying that the bbNonce was incremented
             tokio::time::timeout(core::time::Duration::from_secs(20), async {
                 loop {
-                    if contract.getLatestProcessedNonce(sender).call().await? == new_bbnonce.bbnonce
+                    if relayer_contract
+                        .getLatestProcessedNonce(sender)
+                        .call()
+                        .await?
+                        == new_bbnonce.bbnonce
                     {
                         break Ok::<_, color_eyre::eyre::Report>(());
                     }
@@ -295,7 +247,7 @@ async fn test_withdrawal() -> Result<()> {
 
             tokio::time::timeout(core::time::Duration::from_secs(20), async {
                 loop {
-                    if contract.getLatestInboundNonce().call().await?
+                    if relayer_contract.getLatestInboundNonce().call().await?
                         == onemoney_client.get_account_nonce(relayer_addr).await?.nonce
                     {
                         break Ok::<_, color_eyre::eyre::Report>(());
@@ -308,7 +260,7 @@ async fn test_withdrawal() -> Result<()> {
             let target_balance = wait_for_eventual_balance(
                 &onemoney_client,
                 sender,
-                one_money_token,
+                token_address,
                 balance_before_tx - withdrawal_amount_2 + fee_amount,
             )
             .await?;
@@ -321,15 +273,15 @@ async fn test_withdrawal() -> Result<()> {
 
             // Second deposit
             let sender_balance_before_tx =
-                fetch_balance(&onemoney_client, sender, one_money_token).await?;
+                fetch_balance(&onemoney_client, sender, token_address).await?;
             let recipient_balance_before_tx =
-                fetch_balance(&onemoney_client, recipient, one_money_token).await?;
+                fetch_balance(&onemoney_client, recipient, token_address).await?;
 
             info!(
                 amount = %transfer_amount_2,
                 ?sender,
                 ?sc_token_addr,
-                ?one_money_token,
+                ?token_address,
                 "Invoking payment in 1Money"
             );
 
@@ -343,7 +295,7 @@ async fn test_withdrawal() -> Result<()> {
                 nonce: sender_nonce,
                 recipient,
                 value: transfer_amount_2,
-                token: one_money_token,
+                token: token_address,
             };
 
             onemoney_client
@@ -353,7 +305,7 @@ async fn test_withdrawal() -> Result<()> {
             let sender_balance = wait_for_eventual_balance(
                 &onemoney_client,
                 sender,
-                one_money_token,
+                token_address,
                 sender_balance_before_tx - transfer_amount_2,
             )
             .await?;
@@ -361,7 +313,7 @@ async fn test_withdrawal() -> Result<()> {
             let recipient_balance = wait_for_eventual_balance(
                 &onemoney_client,
                 recipient,
-                one_money_token,
+                token_address,
                 recipient_balance_before_tx + transfer_amount_2,
             )
             .await?;

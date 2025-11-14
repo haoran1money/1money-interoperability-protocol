@@ -18,17 +18,15 @@ jobs:
         working-directory: ./code
     steps:
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
+      - name: Forge build
+        run: forge build --force
+
       - name: Forge lint
         run: forge lint
-
-      - name: Forge build
-        run: forge build
 
       - name: Forge test
         run: forge test

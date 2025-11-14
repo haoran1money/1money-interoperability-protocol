@@ -1,3 +1,15 @@
 [submodule "code/solidity/lib/openzeppelin-contracts-upgradeable"]
 	path = code/solidity/lib/openzeppelin-contracts-upgradeable
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
+[submodule "code/solidity/lib/LayerZero-v2"]
+	path = code/solidity/lib/LayerZero-v2
+	url = https://github.com/LayerZero-Labs/LayerZero-v2
+[submodule "code/solidity/lib/devtools"]
+	path = code/solidity/lib/devtools
+	url = https://github.com/LayerZero-Labs/devtools
+[submodule "code/solidity/lib/LayerZero-v1"]
+	path = code/solidity/lib/LayerZero-v1
+	url = https://github.com/LayerZero-Labs/LayerZero-v1
+[submodule "code/solidity/lib/solidity-bytes-utils"]
+	path = code/solidity/lib/solidity-bytes-utils
+	url = https://github.com/GNSPS/solidity-bytes-utils

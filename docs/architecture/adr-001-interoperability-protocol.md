@@ -197,7 +197,15 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
 * `function updateCheckpointInfo` called by the Permissioned Relayer to update the sidechain's view on the latest 
   payment network checkpoint.
 
+The contract also defines the `InteropProtocol` enum that enumerates the supported cross-chain communication stacks, e.g. LayerZero.
+Every token mapping records which `InteropProtocol` handles the pair so the contract can dispatch to correct protocol in `bridgeTo()`.
+
   ```solidity
+    enum InteropProtocol {
+        LayerZero,
+        Wormhole
+    }
+
     interface IOMInterop {
         // Events
         event OMInteropReceived(
@@ -245,7 +253,7 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
         function mapTokenAddresses(
             address omToken, // token address on payment network
             address scToken, // token address on sidechain
-            uint8 interopProtoId, // cross-chain protocol identifier
+            InteropProtocol interopProtoId, // cross-chain protocol identifier
         ) external;
     }
   ```
@@ -256,7 +264,9 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
 This mapping is populated by the 1Money Network Operator by submitting `mapTokenAddresses` transactions. 
 The operator is responsible for deploying Customized Token Transfer Contracts on the sidechain 
 and for submitting corresponding `CreateNewToken` instructions to the payment network. 
-The mapping should also contain information on the specific cross-chain token transfer protocol. 
+The operator also chooses which cross-chain protocol powers each mapped pair by specifying the `InteropProtocol` when calling `mapTokenAddresses`.
+Adding support for new protocols can be done by extending `InteropProtocol`
+and calling the correct cross-chain protocol contract in `bridgeTo()`.
 
 #### Track Missing BurnAndBridge Certificates
 

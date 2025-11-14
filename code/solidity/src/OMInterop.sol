@@ -2,7 +2,10 @@
 pragma solidity ^0.8.22;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IOMInterop} from "./IOMInterop.sol";
+import {IOFT, SendParam} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
+import {OptionsBuilder} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
+import {MessagingFee} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import {IOMInterop, InteropProtocol} from "./IOMInterop.sol";
 
 /**
  * @title OMInterop
@@ -12,7 +15,7 @@ contract OMInterop is Ownable, IOMInterop {
     struct TokenBinding {
         address omToken;
         address scToken;
-        uint8 interopProtoId;
+        InteropProtocol interopProtoId;
         bool exists;
     }
 
@@ -54,6 +57,7 @@ contract OMInterop is Ownable, IOMInterop {
     error CheckpointCompleted(uint64 checkpointId);
     error NoCompletedCheckpoint();
     error InboundNonceUnavailable();
+    error UnknownInteropProto(InteropProtocol interopProtoId);
     error RateLimitExceeded();
 
     /// @notice Temporary constant for the source chain identifier.
@@ -225,7 +229,7 @@ contract OMInterop is Ownable, IOMInterop {
     }
 
     /// @inheritdoc IOMInterop
-    function mapTokenAddresses(address omToken, address scToken, uint8 interopProtoId)
+    function mapTokenAddresses(address omToken, address scToken, InteropProtocol interopProtoId)
         external
         override
         onlyOperator
@@ -244,7 +248,7 @@ contract OMInterop is Ownable, IOMInterop {
         external
         view
         override
-        returns (address scToken, uint8 interopProtoId, bool exists)
+        returns (address scToken, InteropProtocol interopProtoId, bool exists)
     {
         TokenBinding storage binding = _tokensByOm[omToken];
         return (binding.scToken, binding.interopProtoId, binding.exists);
@@ -255,7 +259,7 @@ contract OMInterop is Ownable, IOMInterop {
         external
         view
         override
-        returns (address omToken, uint8 interopProtoId, bool exists)
+        returns (address omToken, InteropProtocol interopProtoId, bool exists)
     {
         TokenBinding storage binding = _tokensBySidechain[scToken];
         return (binding.omToken, binding.interopProtoId, binding.exists);
@@ -345,8 +349,9 @@ contract OMInterop is Ownable, IOMInterop {
 
     function _bridgeTo(BridgeToRequest memory req) internal bridgeToValidated(req) recordInboundNonce {
         _recordCheckpointProgress(req.checkpointId);
-        // TODO: invoke cross-chain bridge contract with req parameters before emitting event.
-        // For now, we refund the full escrowFee.
+        TokenBinding storage binding = _tokensByOm[req.omToken];
+        _dispatchBridge(binding, req);
+
         emit OMInteropSent(_latestInboundNonceInternal(), req.from, req.escrowFee, req.omToken, req.dstChainId);
     }
 
@@ -395,6 +400,38 @@ contract OMInterop is Ownable, IOMInterop {
         }
     }
 
+    function _dispatchBridge(TokenBinding storage binding, BridgeToRequest memory req) internal {
+        InteropProtocol protoId = binding.interopProtoId;
+        if (protoId == InteropProtocol.LayerZero) {
+            _bridgeWithLayerZero(binding.scToken, req);
+        } else if (protoId == InteropProtocol.Mock) {
+            // no-op for testing purposes
+        } else {
+            revert UnknownInteropProto(protoId);
+        }
+    }
+
+    function _bridgeWithLayerZero(address oftToken, BridgeToRequest memory req) internal {
+        bytes memory options = OptionsBuilder.newOptions();
+        options = OptionsBuilder.addExecutorLzReceiveOption(options, 200000, 0);
+
+        SendParam memory sendParam = SendParam({
+            dstEid: req.dstChainId,
+            to: _addressToBytes32(req.to),
+            amountLD: req.amount,
+            minAmountLD: req.amount,
+            extraOptions: options,
+            composeMsg: bytes(""),
+            oftCmd: bytes("")
+        });
+
+        IOFT(oftToken).send(sendParam, MessagingFee({nativeFee: 0, lzTokenFee: 0}), req.from);
+    }
+
+    function _addressToBytes32(address account) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(account)));
+    }
+
     function setRateLimit(address token, uint256 limit, uint256 window) external onlyOperator {
         _setRateLimit(token, limit, window);
     }
@@ -408,35 +445,35 @@ contract OMInterop is Ownable, IOMInterop {
             return;
         }
 
-        RateLimitParam storage rl_param = rateLimitsParam[token];
-        RateLimitData storage rl_data = rateLimitsData[token];
+        RateLimitParam storage rlParam = rateLimitsParam[token];
+        RateLimitData storage rlData = rateLimitsData[token];
 
-        rl_param.limit = limit;
-        rl_param.window = window;
+        rlParam.limit = limit;
+        rlParam.window = window;
 
-        rl_data.amountInFlight = 0;
-        rl_data.lastEpoch = block.timestamp / rl_param.window;
+        rlData.amountInFlight = 0;
+        rlData.lastEpoch = block.timestamp / rlParam.window;
         emit RateLimitsChanged(token, limit, window);
     }
 
     function _checkAndUpdateRateLimit(address token, uint256 _amount) internal virtual {
-        RateLimitParam storage rl_param = rateLimitsParam[token];
-        RateLimitData storage rl_data = rateLimitsData[token];
+        RateLimitParam storage rlParam = rateLimitsParam[token];
+        RateLimitData storage rlData = rateLimitsData[token];
 
         // A windows configured as 0 means no rate limiting
-        if (rl_param.window == 0) return;
+        if (rlParam.window == 0) return;
 
-        uint256 currentEpoch = block.timestamp / rl_param.window;
+        uint256 currentEpoch = block.timestamp / rlParam.window;
 
-        if (currentEpoch > rl_data.lastEpoch) {
-            rl_data.amountInFlight = 0;
-            rl_data.lastEpoch = currentEpoch;
+        if (currentEpoch > rlData.lastEpoch) {
+            rlData.amountInFlight = 0;
+            rlData.lastEpoch = currentEpoch;
         }
 
-        if (rl_data.amountInFlight + _amount > rl_param.limit) {
+        if (rlData.amountInFlight + _amount > rlParam.limit) {
             revert RateLimitExceeded();
         }
 
-        rl_data.amountInFlight += _amount;
+        rlData.amountInFlight += _amount;
     }
 }

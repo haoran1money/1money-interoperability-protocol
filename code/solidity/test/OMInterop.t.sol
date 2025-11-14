@@ -3,7 +3,7 @@ pragma solidity ^0.8.22;
 
 import {Test} from "forge-std/Test.sol";
 import {OMInterop} from "../src/OMInterop.sol";
-import {IOMInterop} from "../src/IOMInterop.sol";
+import {IOMInterop, InteropProtocol} from "../src/IOMInterop.sol";
 
 contract OMInteropTest is Test {
     OMInterop internal interop;
@@ -57,7 +57,7 @@ contract OMInteropTest is Test {
 
     function testBridgeFromIncrementsNonceAndEmits() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         uint32 chainId = 1;
         vm.expectEmit(true, true, false, true, address(interop));
@@ -83,7 +83,7 @@ contract OMInteropTest is Test {
 
     function testBridgeToEmitsEventAndUpdatesCheckpoint() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         uint64 checkpointId = 10;
         vm.prank(RELAYER);
@@ -107,7 +107,7 @@ contract OMInteropTest is Test {
 
     function testBridgeToWrongNonceReverts() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 0, address(0x02), 100, 111, 5, OM_TOKEN, 1);
@@ -121,16 +121,16 @@ contract OMInteropTest is Test {
 
     function testTokenBindingViewFunctions() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 7);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
-        (address scToken, uint8 protoId, bool exists) = interop.getTokenBindingForOm(OM_TOKEN);
+        (address scToken, InteropProtocol protoId, bool exists) = interop.getTokenBindingForOm(OM_TOKEN);
         assertEq(scToken, SIDECHAIN_TOKEN);
-        assertEq(protoId, 7);
+        assertEq(uint8(protoId), uint8(InteropProtocol.Mock));
         assertTrue(exists);
 
-        (address omToken, uint8 protoId2, bool exists2) = interop.getTokenBindingForSidechain(SIDECHAIN_TOKEN);
+        (address omToken, InteropProtocol protoId2, bool exists2) = interop.getTokenBindingForSidechain(SIDECHAIN_TOKEN);
         assertEq(omToken, OM_TOKEN);
-        assertEq(protoId2, 7);
+        assertEq(uint8(protoId2), uint8(InteropProtocol.Mock));
         assertTrue(exists2);
 
         (address missingToken,, bool missingExists) = interop.getTokenBindingForSidechain(address(0x1234));
@@ -141,22 +141,22 @@ contract OMInteropTest is Test {
     function testMapTokenAddressesOnlyOperator() public {
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
         vm.prank(address(0xCAFE));
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
     }
 
     function testMapTokenAddressesRejectsZeroAddresses() public {
         vm.expectRevert(abi.encodeWithSignature("InvalidAddress()"));
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(address(0), SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(address(0), SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAddress()"));
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, address(0), 1);
+        interop.mapTokenAddresses(OM_TOKEN, address(0), InteropProtocol.Mock);
     }
 
     function testBridgeFromRejectsZeroAmountAndAddress() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAddress()"));
         vm.prank(SIDECHAIN_TOKEN);
@@ -169,7 +169,7 @@ contract OMInteropTest is Test {
 
     function testBridgeToOnlyRelayer() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
         vm.prank(OPERATOR);
@@ -184,7 +184,7 @@ contract OMInteropTest is Test {
 
     function testBridgeToInputValidation() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAddress()"));
         vm.prank(RELAYER);
@@ -205,7 +205,7 @@ contract OMInteropTest is Test {
 
     function testBridgeToCheckpointAlreadyCompletedReverts() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 5;
         vm.prank(RELAYER);
         interop.updateCheckpointInfo(checkpointId, 1);
@@ -220,7 +220,7 @@ contract OMInteropTest is Test {
 
     function testCheckpointTallyIncompleteDoesNotAdvance() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 11;
         vm.prank(RELAYER);
         interop.updateCheckpointInfo(checkpointId, 2);
@@ -237,7 +237,7 @@ contract OMInteropTest is Test {
 
     function testLateCheckpointInfoUpdatesLatestCompleted() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 21;
 
         vm.prank(RELAYER);
@@ -253,7 +253,7 @@ contract OMInteropTest is Test {
 
     function testCertifiedLowerThanCompletedDoesNotAdvanceLatest() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 21;
 
         vm.prank(RELAYER);
@@ -281,7 +281,7 @@ contract OMInteropTest is Test {
 
     function testUpdateCheckpointInfoAfterFinalizationReverts() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 6;
 
         vm.prank(RELAYER);
@@ -296,7 +296,7 @@ contract OMInteropTest is Test {
 
     function testCompletingGapAdvancesEarliestCheckpoint() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         // prepare checkpoints 0, 1, 2
         vm.prank(RELAYER);
@@ -333,7 +333,7 @@ contract OMInteropTest is Test {
 
     function testCheckpointZeroFinalizesAndLocks() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 0;
 
         vm.prank(RELAYER);
@@ -350,7 +350,7 @@ contract OMInteropTest is Test {
 
     function testRateLimitExceeded() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         uint32 chainId = 1;
 
@@ -381,7 +381,7 @@ contract OMInteropTest is Test {
 
     function testDisabledRateLimit() public {
         vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, 1);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         uint32 chainId = 1;
 

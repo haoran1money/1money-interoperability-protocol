@@ -16,30 +16,29 @@ pub async fn relay_outgoing_events(
     poll_interval: Duration,
 ) -> Result<(), Error> {
     info!(
-        "Connecting to onemoney endpoint: {}",
-        config.one_money_node_url
+        url = %config.one_money_node_url,
+        "Connecting to onemoney",
     );
     info!(
-        "Connecting to sidechain endpoint: {}",
-        config.side_chain_node_url
+        url = %config.side_chain_http_url,
+        "Connecting to sidechain",
     );
     info!(
-        "Using relayer address: {}",
-        config.relayer_private_key.address()
+        relayer_address = %config.relayer_private_key.address(),
     );
 
     // TODO: Checkpoints will be replaced by certified transactions
     info!(
-        "Fetching checkpoints every {}",
-        format_duration(poll_interval)
+        interval = %format_duration(poll_interval),
+        "Fetching checkpoints",
     );
 
     let mut transaction_stream = transaction_stream(config, start_checkpoint, poll_interval);
 
     while let Some((current_checkpoint_id, transactions)) = transaction_stream.try_next().await? {
-        info!(
+        debug!(
             transactions = transactions.len(),
-            "Received transactions from stream"
+            "Processing BurnAndBridge transactions from stream"
         );
         debug!(?transactions, "transactions details");
 
@@ -55,7 +54,7 @@ pub async fn relay_outgoing_events(
             process_burn_and_bridge_transactions(config, relayer_nonce.clone(), tx)
                 .await
                 .inspect_err(|err| {
-                    error!("Failed processing burn and bridge transaction stream: {err:?}");
+                    error!(?err, "Failed processing burn and bridge transaction stream");
                 })?;
         }
     }

@@ -21,7 +21,7 @@ pub async fn relay_poa_events(
     );
     info!(
         "Connecting to sidechain endpoint: {}",
-        config.side_chain_node_url
+        config.side_chain_http_url
     );
     info!(
         "Using relayer address: {}",

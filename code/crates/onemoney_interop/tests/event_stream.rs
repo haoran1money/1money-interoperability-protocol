@@ -86,7 +86,7 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
         .await?;
     debug!("mapTokenAddresses transaction confirmed");
 
-    let mut stream = event_stream(http_endpoint, contract_addr, 0).await;
+    let mut stream = event_stream(http_endpoint, ws_endpoint, contract_addr, 0).await;
     debug!("subscribed to OMInterop event stream");
 
     let ownership_transferred = next_event(&mut stream).await;

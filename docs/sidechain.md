@@ -1,0 +1,101 @@
+# Local Sidechain Testnet
+
+Spin up the sidechain testnet with custom 1money L1 validator keys.
+
+## Collect validator private keys
+
+```bash
+cat /tmp/1m-network/node*/conf/consensus_secret_key.hex
+```
+
+You should see four keys like:
+
+```
+0x0b03eac696409d63e0512e2e0b39ac5be3dd58dc86b3e8b3a0ddab929c2bf693
+0xfa1c3f2b6488e9a9a83873df22b50ddbef221525bb8158fbb647f2fc6fe0a0dc
+0x0466a99f2607d41f009e6145a661fcb91051c2c5de6d7983561b73b34a242373
+0x87e906c8870d3bc997e529edc64344bcc69031aa31a511254c342b8c86c89bda
+```
+
+## Clone emerald
+
+```bash
+git clone git@github.com:informalsystems/emerald
+cd emerald
+make build # builds cargo binaries and solidity contracts
+```
+
+## Generate testnet configuration
+
+Create `.testnet` with your keys (example uses the ones above):
+
+```bash
+./scripts/generate_testnet_config.sh \
+  --node-keys 0x0b03eac696409d63e0512e2e0b39ac5be3dd58dc86b3e8b3a0ddab929c2bf693 \
+  --node-keys 0xfa1c3f2b6488e9a9a83873df22b50ddbef221525bb8158fbb647f2fc6fe0a0dc \
+  --node-keys 0x0466a99f2607d41f009e6145a661fcb91051c2c5de6d7983561b73b34a242373 \
+  --node-keys 0x87e906c8870d3bc997e529edc64344bcc69031aa31a511254c342b8c86c89bda \
+  --testnet-config-dir .testnet
+```
+
+This sets node count from the keys, writes `.testnet/testnet_config.toml`, and
+emits per-node configs in `.testnet/config/`.
+
+## Generate node configs
+
+```bash
+cargo run --bin malachitebft-eth-app -- testnet \
+  --home nodes \
+  --testnet-config .testnet/testnet_config.toml
+```
+
+Node directories and validator keys land in `./nodes/{0,1,2,3}/`.
+
+## Extract validator public keys
+
+```bash
+ls nodes/*/config/priv_validator_key.json | \
+  xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} \
+  > nodes/validator_public_keys.txt
+```
+
+## Create the genesis file
+
+```bash
+cargo run --bin malachitebft-eth-utils genesis \
+  --public-keys-file ./nodes/validator_public_keys.txt
+```
+
+`./assets/genesis.json` is produced for Reth.
+
+## Start execution clients and monitoring
+
+```bash
+docker compose up -d reth0 reth1 reth2 reth3 prometheus grafana otterscan
+```
+
+## Connect Reth peers
+
+```bash
+./scripts/add_peers.sh --nodes 4
+```
+
+The script waits for readiness, reads each enode, and sets trusted peers across
+nodes.
+
+## Start consensus nodes
+
+```bash
+bash scripts/spawn.bash --nodes 4 --home nodes --no-delay
+```
+
+This builds the binary, starts all nodes, logs to
+`nodes/{0,1,2,3}/logs/node.log`, and keeps running until you press Ctrl+C.
+
+## Monitor metrics
+
+Grafana dashboards are available at http://localhost:3000.
+
+## Block explorer
+
+Otterscan is available at http://localhost:80.

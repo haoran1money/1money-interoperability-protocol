@@ -38,6 +38,7 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
 
     let keys = anvil.keys();
     let http_endpoint = anvil.endpoint_url();
+    let ws_endpoint = anvil.ws_endpoint_url();
 
     let sc_token_addr = sc_token_wallet.address();
     let relayer_addr = relayer_wallet.address();
@@ -60,7 +61,8 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
 
     let config = Config {
         one_money_node_url: onemoney_client.base_url().clone(),
-        side_chain_node_url: http_endpoint.clone(),
+        side_chain_http_url: http_endpoint.clone(),
+        side_chain_ws_url: ws_endpoint.clone(),
         interop_contract_address: contract_addr,
         relayer_private_key: relayer_wallet.clone(),
     };
@@ -371,7 +373,8 @@ async fn test_clear_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Re
 
     let config = Config {
         one_money_node_url: onemoney_client.base_url().clone(),
-        side_chain_node_url: http_endpoint.clone(),
+        side_chain_http_url: http_endpoint.clone(),
+        side_chain_ws_url: anvil.ws_endpoint_url(),
         interop_contract_address: contract_addr,
         relayer_private_key: relayer_wallet.clone(),
     };

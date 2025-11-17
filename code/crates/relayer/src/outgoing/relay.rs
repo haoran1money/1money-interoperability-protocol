@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::OMInterop;
 use onemoney_protocol::{Transaction, TxPayload};
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::config::{Config, RelayerNonce};
 use crate::outgoing::error::Error;
@@ -16,7 +16,7 @@ pub async fn process_checkpoint_info(
 ) -> Result<(), Error> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
-        .connect_http(config.side_chain_node_url.clone());
+        .connect_http(config.side_chain_http_url.clone());
 
     let contract = OMInterop::new(config.interop_contract_address, provider);
 
@@ -51,7 +51,7 @@ pub async fn process_burn_and_bridge_transactions(
 ) -> Result<(), Error> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
-        .connect_http(config.side_chain_node_url.clone());
+        .connect_http(config.side_chain_http_url.clone());
 
     let contract = OMInterop::new(config.interop_contract_address, provider);
 
@@ -103,7 +103,7 @@ pub async fn process_burn_and_bridge_transactions(
         .get_receipt()
         .await?;
 
-    info!(?tx_receipt, "Tx receipt for bridge to");
+    debug!(?tx_receipt, "Tx receipt for bridge to");
 
     Ok(())
 }

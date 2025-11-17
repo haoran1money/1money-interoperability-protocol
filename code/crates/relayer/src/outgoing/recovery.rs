@@ -7,7 +7,7 @@ use crate::outgoing::error::Error;
 pub async fn get_earliest_incomplete_checkpoint_number(config: &Config) -> Result<u64, Error> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
-        .connect_http(config.side_chain_node_url.clone());
+        .connect_http(config.side_chain_http_url.clone());
     let contract = OMInterop::new(config.interop_contract_address, provider);
 
     let res = contract.getLatestCompletedCheckpoint().call().await;

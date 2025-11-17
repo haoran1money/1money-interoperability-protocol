@@ -37,6 +37,7 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
     } = e2e_test_context;
 
     let http_endpoint = anvil.endpoint_url();
+    let ws_endpoint = anvil.ws_endpoint_url();
 
     let onemoney_client = Client::custom(ONE_MONEY_BASE_URL.to_string())?;
 
@@ -46,7 +47,8 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
 
     let config = Config {
         one_money_node_url: onemoney_client.base_url().clone(),
-        side_chain_node_url: http_endpoint.clone(),
+        side_chain_http_url: http_endpoint.clone(),
+        side_chain_ws_url: ws_endpoint.clone(),
         interop_contract_address: contract_addr,
         relayer_private_key: relayer_wallet.clone(),
     };
@@ -124,7 +126,8 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
 
     let config = Config {
         one_money_node_url: onemoney_client.base_url().clone(),
-        side_chain_node_url: http_endpoint.clone(),
+        side_chain_http_url: http_endpoint.clone(),
+        side_chain_ws_url: anvil.ws_endpoint_url(),
         interop_contract_address: contract_addr,
         relayer_private_key: relayer_wallet.clone(),
     };

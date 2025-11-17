@@ -19,14 +19,11 @@ pub type OMInteropLog = RpcLog<OMInterop::OMInteropEvents>;
 /// continues polling the node for new events by subscribing to logs over WebSocket.
 pub async fn event_stream(
     http_endpoint: Url,
+    ws_endpoint: Url,
     contract: Address,
     from_block: u64,
 ) -> BoxStream<'static, Result<OMInteropLog, OMInteropError>> {
     try_stream! {
-        let ws_endpoint = http_endpoint
-            .as_str()
-            .replace("http://", "ws://")
-            .replace("https://", "wss://"); // TODO: can we do better URL manipulation?
         let ws = WsConnect::new(ws_endpoint);
         let http_provider = ProviderBuilder::new().connect_http(http_endpoint);
         let ws_provider = ProviderBuilder::new().connect_ws(ws).await?;

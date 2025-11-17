@@ -1,4 +1,4 @@
-include = [ "taplo.toml", "**/Cargo.toml", "**/foundry.toml", "rustfmt.toml" ]
+include = [ "taplo.toml", "**/Cargo.toml", "**/foundry.toml", "rustfmt.toml", "../.github/typos.toml" ]
 exclude = [ "solidity/lib/**" ]
 
 [formatting]

@@ -10,6 +10,7 @@ rust-version = { workspace = true }
 alloy-contract   = { workspace = true }
 alloy-sol-types  = { workspace = true }
 alloy-primitives = { workspace = true }
+alloy-signer     = { workspace = true }
 
 [lints]
 workspace = true

@@ -8,40 +8,45 @@ use crate::onemoney::types::validator::ValidatorSet;
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Epoch {
     pub epoch_id: u64,
-    pub hash: B256,
+    pub certificate_hash: B256,
     pub validator_set: ValidatorSet,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RawEpoch {
     pub epoch_id: u64,
-    pub hash: B256,
+    pub certificate_hash: B256,
     pub certificate: Certificate,
 }
 
 impl From<RawEpoch> for Epoch {
     fn from(raw: RawEpoch) -> Self {
+        let message = match raw.certificate {
+            Certificate::Genesis { proposal } => proposal.message,
+            Certificate::Epoch { proposal } => proposal.message,
+        };
         Self {
             epoch_id: raw.epoch_id,
-            hash: raw.hash,
-            validator_set: raw.certificate.genesis.proposal.message.validator_set,
+            certificate_hash: raw.certificate_hash,
+            validator_set: message.validator_set,
         }
     }
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct Certificate {
-    #[serde(rename = "Genesis")]
-    pub genesis: Genesis,
+#[serde(tag = "type")]
+pub enum Certificate {
+    Genesis { proposal: GenesisProposal },
+    Epoch { proposal: GovernanceProposal },
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct Genesis {
-    pub proposal: Proposal,
+pub struct GenesisProposal {
+    pub message: Message,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
-pub struct Proposal {
+pub struct GovernanceProposal {
     pub message: Message,
 }
 

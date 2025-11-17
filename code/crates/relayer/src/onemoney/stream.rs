@@ -30,7 +30,19 @@ pub fn transaction_stream(
                 matches!(tx.data, TxPayload::TokenBurnAndBridge { .. })
             }).await {
                 Ok(transactions) => {
-                    info!(checkpoint = current_checkpoint_id, "BurnAndBridge transactions extracted");
+                    if transactions.is_empty() {
+                        debug!(
+                            checkpoint = current_checkpoint_id,
+                            "No BurnAndBridge transactions in this checkpoint, skipping"
+                        );
+                    } else {
+                        info!(
+                            count = transactions.len(),
+                            checkpoint = current_checkpoint_id,
+                            "Found BurnAndBridge transactions",
+                        );
+                        debug!(?transactions, "BurnAndBridge transactions details");
+                    }
 
                     yield (current_checkpoint_id, transactions);
 
@@ -38,7 +50,7 @@ pub fn transaction_stream(
                 },
                 Err(err) => {
                     // If the checkpoint doesn't exist it will return a 404 error, we just log and try again later
-                    debug!("Failed to fetch checkpoint will try again: {err}");
+                    debug!(%err, "Failed to fetch checkpoint will try again");
                 }
             }
         }

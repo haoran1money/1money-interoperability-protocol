@@ -13,12 +13,13 @@ pub mod recovery;
 use error::Error as IncomingError;
 use handlers::Relayer1MoneyContext;
 
-pub async fn relay_sc_events(
+pub async fn relay_incoming_events(
     config: &Config,
     from_block: BlockNumber,
 ) -> Result<(), IncomingError> {
     let mut sc_event_stream = onemoney_interop::event::event_stream(
-        config.side_chain_node_url.clone(),
+        config.side_chain_http_url.clone(),
+        config.side_chain_ws_url.clone(),
         config.interop_contract_address,
         from_block,
     )

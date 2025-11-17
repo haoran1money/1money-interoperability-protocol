@@ -3,7 +3,7 @@ use core::time::Duration;
 
 use relayer::config::Config;
 use relayer::incoming::recovery::get_latest_incomplete_block_number;
-use relayer::incoming::relay_sc_events;
+use relayer::incoming::relay_incoming_events;
 use relayer::outgoing::recovery::get_earliest_incomplete_checkpoint_number;
 use relayer::outgoing::stream::relay_outgoing_events;
 use tracing::{debug, error, info, warn};
@@ -59,7 +59,7 @@ where
         async move {
             let from_block = get_latest_incomplete_block_number(&config).await?;
             info!(from_block = %from_block, "Will start incoming relayer task");
-            let relayer_result = relay_sc_events(&config, from_block).await;
+            let relayer_result = relay_incoming_events(&config, from_block).await;
             if let Err(err) = &relayer_result {
                 warn!(%err, "relayer side-chain event loop ended");
             }

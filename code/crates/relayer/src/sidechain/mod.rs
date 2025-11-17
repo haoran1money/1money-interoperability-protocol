@@ -17,7 +17,7 @@ pub async fn process_new_validator_set(
 ) -> Result<(), SideChainError> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
-        .connect_http(config.side_chain_node_url.clone());
+        .connect_http(config.side_chain_http_url.clone());
     let contract = ValidatorManager::new(CONTRACT_ADDRESS, provider.clone());
 
     // Fetch current validator set from contract
@@ -38,16 +38,43 @@ pub async fn process_new_validator_set(
         return Ok(());
     }
 
+    let add_validators_public_keys: Vec<_> = add_validators
+        .iter()
+        .map(|v| ValidatorManager::ValidatorRegistration {
+            publicKey: v.validatorKey.public_key_bytes().into(),
+            power: v.power,
+        })
+        .collect();
+
+    let remove_validator_addresses: Vec<_> = remove_validator_keys
+        .iter()
+        .map(|key| key.address())
+        .collect();
+
+    info!(
+        add_count = add_validators_public_keys.len(),
+        remove_count = remove_validator_addresses.len(),
+        "Updating validator set",
+    );
+
     // Send transaction to update validator set
     let tx_receipt = contract
-        .addAndRemove(add_validators, remove_validator_keys)
+        .updateValidatorSet(add_validators_public_keys, remove_validator_addresses)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
-        .await?
+        .await
+        .map(Ok)
+        .or_else(|e| {
+            e.try_decode_into_interface_error::<ValidatorManager::ValidatorManagerErrors>()
+                .map(Err)
+        })?
+        .map_err(SideChainError::ValidatorManagerContractReverted)?
         .get_receipt()
         .await?;
 
-    info!(?tx_receipt, "Tx receipt for validator set update");
+    info!(tx_hash=%tx_receipt.transaction_hash, "Validator set updated successfully");
+
+    debug!(?tx_receipt, "Tx receipt for validator set update");
 
     // Query new validator set
     let new_validators = contract.getValidators().call().await?;

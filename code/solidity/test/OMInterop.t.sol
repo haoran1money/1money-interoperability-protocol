@@ -119,6 +119,39 @@ contract OMInteropTest is Test {
         assertEq(interop.getLatestProcessedNonce(address(0x01)), 1);
     }
 
+    function testBridgeFromAndToSequenceIncrementsInboundNonce() public {
+        vm.prank(OPERATOR);
+        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
+
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropReceived(0, address(0x1010), 123, OM_TOKEN, 1);
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x1010), 123);
+        assertEq(interop.getLatestInboundNonce(), 1, "first inbound nonce incorrect");
+
+        vm.prank(RELAYER);
+        interop.updateCheckpointInfo(1, 1);
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropSent(1, address(0xAAAA), 5, OM_TOKEN, 1);
+        vm.prank(RELAYER);
+        interop.bridgeTo(address(0xAAAA), 0, address(0xBBBB), 55, 1, 5, OM_TOKEN, 1);
+        assertEq(interop.getLatestInboundNonce(), 2, "second inbound nonce incorrect");
+
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropReceived(2, address(0x2020), 456, OM_TOKEN, 1);
+        vm.prank(SIDECHAIN_TOKEN);
+        interop.bridgeFrom(address(0x2020), 456);
+        assertEq(interop.getLatestInboundNonce(), 3, "third inbound nonce incorrect");
+
+        vm.prank(RELAYER);
+        interop.updateCheckpointInfo(2, 1);
+        vm.expectEmit(true, true, false, true, address(interop));
+        emit IOMInterop.OMInteropSent(3, address(0xCCCC), 5, OM_TOKEN, 1);
+        vm.prank(RELAYER);
+        interop.bridgeTo(address(0xCCCC), 0, address(0xDDDD), 65, 1, 5, OM_TOKEN, 2);
+        assertEq(interop.getLatestInboundNonce(), 4, "fourth inbound nonce incorrect");
+    }
+
     function testTokenBindingViewFunctions() public {
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);

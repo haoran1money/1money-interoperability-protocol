@@ -1,0 +1,3 @@
+[default]
+# random string
+extend-ignore-re = [ "[0-9A-Za-z+/]{20,}" ]

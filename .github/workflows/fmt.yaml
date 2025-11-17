@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: denoland/setup-deno@v2
       - name: Run deno fmt
-        run: deno fmt --check .github/**/*.yaml .github/**/*.yml
+        run: deno fmt --check .github/**/*.yaml .github/**/*.yml docs/{testnet,sidechain}.md
 
   typos:
     name: Spell Check with Typos
@@ -36,3 +36,5 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: crate-ci/typos@v1
+        with:
+          config: ./.github/typos.toml

@@ -22,23 +22,22 @@ fn build_epoch_response(
     );
     json!({
         "epoch_id": epoch_id,
-        "hash": format!("0x{:064x}", epoch_id),
+        "certificate_hash": format!("0x{:064x}", epoch_id),
         "certificate": {
-            "Genesis": {
-                "proposal": {
-                    "message": {
-                        "epoch": { "epoch_id": epoch_id },
-                        "chain": 1,
-                        "operator_public_key": consensus_key_hex,
-                        "operator_address": operator_address,
-                        "validator_set": {
-                            "members": [{
-                                "consensus_public_key": consensus_key_hex,
-                                "address": operator_address,
-                                "peer_id": format!("peer-{epoch_id}"),
-                                "archive": false
-                            }]
-                        }
+            "type": "Genesis",
+            "proposal": {
+                "message": {
+                    "epoch": { "epoch_id": epoch_id },
+                    "chain": 1,
+                    "operator_public_key": consensus_key_hex,
+                    "operator_address": operator_address,
+                    "validator_set": {
+                        "members": [{
+                            "consensus_public_key": consensus_key_hex,
+                            "address": operator_address,
+                            "peer_id": format!("peer-{epoch_id}"),
+                            "archive": false
+                        }]
                     }
                 }
             }

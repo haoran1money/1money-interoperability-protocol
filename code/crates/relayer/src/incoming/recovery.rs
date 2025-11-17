@@ -8,7 +8,7 @@ use crate::incoming::error::Error;
 pub async fn get_latest_incomplete_block_number(config: &Config) -> Result<u64, Error> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
-        .connect_http(config.side_chain_node_url.clone());
+        .connect_http(config.side_chain_http_url.clone());
     let latest_block_number = provider.get_block_number().await?;
 
     let contract = OMInterop::new(config.interop_contract_address, provider);

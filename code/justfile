@@ -7,26 +7,26 @@ precommit: fmt-check lint build check-tests
 fmt-check:
 	cargo +nightly fmt --all --check
 	taplo fmt --check
-	deno fmt --check ../.github/**/*.yaml ../.github/**/*.yml
+	deno fmt --check ../.github/**/*.yaml ../.github/**/*.yml ../docs/{testnet,sidechain}.md
 
 # Format all project files
 fmt:
 	cargo +nightly fmt --all
 	taplo fmt
-	deno fmt ../.github/**/*.yaml ../.github/**/*.yml
+	deno fmt ../.github/**/*.yaml ../.github/**/*.yml ../docs/{testnet,sidechain}.md
 
 # Lint all components
 lint:
 	cargo +nightly clippy --tests -- -D warnings
-	forge lint --force
-	typos --exclude solidity/lib
+	forge lint
+	typos --exclude solidity/lib --config ../.github/typos.toml
 
 # Build artifacts
 build:
 	cargo build --workspace
-	forge build --force
+	forge build
 
 # Run test suites
 check-tests:
 	cargo nextest run --workspace
-	forge test --force
+	forge test

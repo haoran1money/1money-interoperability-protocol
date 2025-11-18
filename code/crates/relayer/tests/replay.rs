@@ -16,6 +16,8 @@ use utils::account::{fetch_account_context, fetch_balance, wait_for_balance_chan
 use utils::setup::{e2e_test_context, E2ETestContext};
 use utils::transaction::wait_for_transaction;
 
+use crate::utils::operator::{OperationClient, OPERATOR_PRIVATE_KEY};
+
 #[rstest::rstest]
 #[tokio::test]
 #[test_log::test]
@@ -48,6 +50,13 @@ async fn cross_chain_replay_flow_is_enforced(
     let net_bridge_amount = bridge_amount
         .checked_add(refund_amount)
         .expect("bridge amount + escrow should not overflow");
+
+    // TODO: Temporary solution adds tokens to the relayer account until
+    // fees are correctly transferred by 1Money
+    let operator_client = OperationClient::new(&onemoney_client, OPERATOR_PRIVATE_KEY);
+    operator_client
+        .mint_token(relayer_address, U256::from(10000000), token_address)
+        .await?;
 
     info!("Step 0: initiate bridgeFrom on the side-chain");
     // --- Step 0: bridgeFrom to create source transaction -------------------------------------------------------------
@@ -130,47 +139,6 @@ async fn cross_chain_replay_flow_is_enforced(
         "user balance changed after replay"
     );
 
-    info!("Step 2a: transfer escrow fee to relayer (temporary workaround)");
-    // --- Step 2a: temporary escrow fee transfer ----------------------------------------------------------------------
-    let relayer_balance_before_fee =
-        fetch_balance(&onemoney_client, relayer_address, token_address).await?;
-    let (recent_checkpoint, nonce) = fetch_account_context(&onemoney_client, user_address).await?;
-    let escrow_fee_payload = PaymentPayload {
-        recent_checkpoint,
-        chain_id,
-        nonce,
-        recipient: relayer_address,
-        value: refund_amount,
-        token: token_address,
-    };
-    let escrow_transfer = onemoney_client
-        .send_payment(escrow_fee_payload, user_private_key.as_str())
-        .await?;
-    assert!(
-        wait_for_transaction(
-            &onemoney_client,
-            &escrow_transfer.hash,
-            "escrow fee transfer"
-        )
-        .await?
-        .is_break(),
-        "escrow fee transfer was rejected by 1Money"
-    );
-    let relayer_balance_after_fee = wait_for_balance_change(
-        &onemoney_client,
-        relayer_address,
-        token_address,
-        relayer_balance_before_fee,
-    )
-    .await?;
-    let relayer_delta = relayer_balance_after_fee
-        .checked_sub(relayer_balance_before_fee)
-        .expect("relayer balance should not decrease after escrow fee transfer");
-    assert_eq!(
-        relayer_delta, refund_amount,
-        "relayer did not receive escrow fee transfer"
-    );
-
     info!("Step 2b: begin burn_and_bridge replay validation");
     // --- Step 2b: burn_and_bridge replay -----------------------------------------------------------------------------
     let pre_burn_balance = fetch_balance(&onemoney_client, user_address, token_address).await?;
@@ -218,7 +186,8 @@ async fn cross_chain_replay_flow_is_enforced(
 
     // Only count bridge_amount here; the refund was sent to the relayer in Step 2a.
     assert_eq!(
-        burn_delta, bridge_amount,
+        burn_delta,
+        bridge_amount + refund_amount,
         "user balance did not decrease by bridge_amount"
     );
 

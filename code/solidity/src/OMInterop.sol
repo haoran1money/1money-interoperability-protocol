@@ -1,37 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.22;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {IOMInterop, InteropProtocol, BridgeToRequest} from "./IOMInterop.sol";
 import {LZInterop} from "./LZInterop.sol";
+import {OMInteropTypes} from "./OMInteropTypes.sol";
+import {OMInteropStorage} from "./OMInteropStorage.sol";
 
 /**
  * @title OMInterop
  * @notice The interoperability contract described in ADR-001 with Ownable access control.
  */
-contract OMInterop is Ownable, LZInterop, IOMInterop {
-    struct TokenBinding {
-        address omToken;
-        address scToken;
-        InteropProtocol interopProtoId;
-        bool exists;
-    }
-
-    struct CheckpointTally {
-        uint32 certified;
-        uint32 completed;
-    }
-
-    struct RateLimitParam {
-        uint256 limit;
-        uint256 window;
-    }
-
-    struct RateLimitData {
-        uint256 amountInFlight;
-        uint256 lastEpoch;
-    }
-
+contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop {
     error Unauthorized();
     error InvalidAddress();
     error InvalidAmount();
@@ -51,21 +32,6 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     /// @notice Temporary constant for the source chain identifier.
     uint32 internal constant SRC_CHAIN_ID = 1;
 
-    /// @notice Operator address allowed to configure the contract.
-    address public operator;
-    /// @notice Relayer address allowed to execute bridge operations.
-    address public relayer;
-    /// @notice Next inbound nonce assigned to successful `bridgeFrom` executions.
-    uint64 private _nextInboundNonce;
-    /// @notice Earliest checkpoint index that is still incomplete (latest completed + 1).
-    uint64 private _earliestIncompletedCheckpoint;
-    mapping(address => TokenBinding) private _tokensBySidechain;
-    mapping(address => TokenBinding) private _tokensByOm;
-    mapping(address => uint64) private _latestBbNonce;
-    mapping(uint64 => CheckpointTally) private _checkpointTallies;
-    mapping(address token => RateLimitParam limit) public rateLimitsParam;
-    mapping(address token => RateLimitData limit) public rateLimitsData;
-
     /// @notice Emitted when the operator address changes.
     event OperatorUpdated(address indexed newOperator);
 
@@ -75,21 +41,41 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     /// @notice Emitted when the rate limit changed for a token.
     event RateLimitsChanged(address token, uint256 limit, uint256 window);
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
     /// @notice Sets the initial owner, operator, and relayer.
     /// @param owner_ Address that will own the contract.
     /// @param operator_ Address allowed to execute operator-restricted actions.
     /// @param relayer_ Address allowed to dispatch bridge transactions.
-    constructor(address owner_, address operator_, address relayer_)
-        Ownable(owner_)
+    function initialize(address owner_, address operator_, address relayer_)
+        external
+        initializer
         nonZeroAddress(owner_)
         nonZeroAddress(operator_)
         nonZeroAddress(relayer_)
     {
-        operator = operator_;
-        relayer = relayer_;
+        __Ownable_init(owner_);
+
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+
+        s.operator = operator_;
+        s.relayer = relayer_;
 
         emit OperatorUpdated(operator_);
         emit RelayerUpdated(relayer_);
+    }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function operator() external view returns (address) {
+        return OMInteropStorage.layout().operator;
+    }
+
+    function relayer() external view returns (address) {
+        return OMInteropStorage.layout().relayer;
     }
 
     modifier onlyOperator() {
@@ -132,17 +118,23 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         _;
     }
 
+    function version() external pure virtual returns (string memory) {
+        return "v1.0.0";
+    }
+
     /// @notice Updates the operator account. Only callable by the owner.
     /// @param newOperator Address of the new operator.
     function setOperator(address newOperator) external onlyOwner nonZeroAddress(newOperator) {
-        operator = newOperator;
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        s.operator = newOperator;
         emit OperatorUpdated(newOperator);
     }
 
     /// @notice Updates the relayer account. Only callable by the owner.
     /// @param newRelayer Address of the new relayer.
     function setRelayer(address newRelayer) external onlyOwner nonZeroAddress(newRelayer) {
-        relayer = newRelayer;
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        s.relayer = newRelayer;
         emit RelayerUpdated(newRelayer);
     }
 
@@ -155,7 +147,8 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         knownSidechainToken(msg.sender)
         recordInboundNonce
     {
-        TokenBinding storage binding = _tokensBySidechain[msg.sender];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.TokenBinding storage binding = s.tokensBySidechain[msg.sender];
         // Enforce inflow limit
         _checkAndUpdateRateLimit(binding.omToken, amount);
 
@@ -224,7 +217,8 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         onlyRelayer
         checkpointNotCompleted(checkpointId)
     {
-        CheckpointTally storage tally = _checkpointTallies[checkpointId];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.CheckpointTally storage tally = s.checkpointTallies[checkpointId];
 
         tally.certified = burnAndBridgeCount;
 
@@ -233,9 +227,10 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
 
     /// @inheritdoc IOMInterop
     function getLatestCompletedCheckpoint() external view override returns (uint64 checkpointId) {
-        checkpointId = _earliestIncompletedCheckpoint;
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        checkpointId = s.earliestIncompletedCheckpoint;
         if (checkpointId == 0) {
-            if (_checkpointTallies[0].certified != 0) {
+            if (s.checkpointTallies[0].certified != 0) {
                 return 0;
             }
             revert NoCompletedCheckpoint();
@@ -254,11 +249,16 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         nonZeroAddress(omToken)
         nonZeroAddress(scToken)
     {
-        TokenBinding memory binding =
-            TokenBinding({omToken: omToken, scToken: scToken, interopProtoId: interopProtoId, exists: true});
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.TokenBinding memory binding = OMInteropTypes.TokenBinding({
+            omToken: omToken,
+            scToken: scToken,
+            interopProtoId: interopProtoId,
+            exists: true
+        });
 
-        _tokensBySidechain[scToken] = binding;
-        _tokensByOm[omToken] = binding;
+        s.tokensBySidechain[scToken] = binding;
+        s.tokensByOm[omToken] = binding;
     }
 
     /// @inheritdoc IOMInterop
@@ -268,7 +268,8 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         override
         returns (address scToken, InteropProtocol interopProtoId, bool exists)
     {
-        TokenBinding storage binding = _tokensByOm[omToken];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.TokenBinding storage binding = s.tokensByOm[omToken];
         return (binding.scToken, binding.interopProtoId, binding.exists);
     }
 
@@ -279,18 +280,21 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         override
         returns (address omToken, InteropProtocol interopProtoId, bool exists)
     {
-        TokenBinding storage binding = _tokensBySidechain[scToken];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.TokenBinding storage binding = s.tokensBySidechain[scToken];
         return (binding.omToken, binding.interopProtoId, binding.exists);
     }
 
     /// @inheritdoc IOMInterop
     function getLatestInboundNonce() external view override returns (uint64 nonce) {
-        nonce = _nextInboundNonce;
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        nonce = s.nextInboundNonce;
     }
 
     /// @inheritdoc IOMInterop
     function getLatestProcessedNonce(address account) external view override returns (uint64 nonce) {
-        nonce = _latestBbNonce[account];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        nonce = s.latestBbNonce[account];
     }
 
     /// @inheritdoc IOMInterop
@@ -300,17 +304,20 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         override
         returns (uint32 certified, uint32 completed)
     {
-        CheckpointTally storage tally = _checkpointTallies[checkpointId];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.CheckpointTally storage tally = s.checkpointTallies[checkpointId];
         certified = tally.certified;
         completed = tally.completed;
     }
 
     function _revertIfNotOperator() internal view {
-        if (operator != msg.sender) revert Unauthorized();
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        if (s.operator != msg.sender) revert Unauthorized();
     }
 
     function _revertIfNotRelayer() internal view {
-        if (relayer != msg.sender) revert Unauthorized();
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        if (s.relayer != msg.sender) revert Unauthorized();
     }
 
     function _revertIfZeroAddress(address account) internal pure {
@@ -322,17 +329,20 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     }
 
     function _revertIfUnknownSidechainToken(address scToken) internal view {
-        if (!_tokensBySidechain[scToken].exists) revert UnknownToken(scToken);
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        if (!s.tokensBySidechain[scToken].exists) revert UnknownToken(scToken);
     }
 
     function _revertIfUnknownOmToken(address omToken) internal view {
-        if (!_tokensByOm[omToken].exists) revert UnknownToken(omToken);
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        if (!s.tokensByOm[omToken].exists) revert UnknownToken(omToken);
     }
 
     function _enforceSequentialNonce(address account, uint64 bbNonce) internal {
-        uint64 expected = _latestBbNonce[account];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        uint64 expected = s.latestBbNonce[account];
         if (bbNonce != expected) revert InvalidNonce(bbNonce, expected);
-        _latestBbNonce[account] = bbNonce + 1;
+        s.latestBbNonce[account] = bbNonce + 1;
     }
 
     function _revertIfInvalidChain(uint32 chainId) internal pure {
@@ -340,25 +350,28 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     }
 
     function _increaseInboundNonce() internal {
-        if (_nextInboundNonce == type(uint64).max) revert InboundNonceOverflow();
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        if (s.nextInboundNonce == type(uint64).max) revert InboundNonceOverflow();
         unchecked {
-            _nextInboundNonce += 1;
+            s.nextInboundNonce += 1;
         }
     }
 
     function _revertIfCheckpointComplete(uint64 checkpointId) internal view {
-        CheckpointTally storage tally = _checkpointTallies[checkpointId];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.CheckpointTally storage tally = s.checkpointTallies[checkpointId];
         if (tally.certified != 0 && tally.completed >= tally.certified) {
             revert CheckpointCompleted(checkpointId);
         }
     }
 
     function _quoteBridgeTo(BridgeToRequest memory req) internal view returns (uint256 bridgeFee, address feeToken) {
-        TokenBinding storage binding = _tokensByOm[req.omToken];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.TokenBinding storage binding = s.tokensByOm[req.omToken];
         (bridgeFee, feeToken) = _quoteBridgeTo(binding, req);
     }
 
-    function _quoteBridgeTo(TokenBinding storage binding, BridgeToRequest memory req)
+    function _quoteBridgeTo(OMInteropTypes.TokenBinding storage binding, BridgeToRequest memory req)
         internal
         view
         returns (uint256 bridgeFee, address feeToken)
@@ -390,7 +403,8 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     }
 
     function _bridgeTo(BridgeToRequest memory req) internal bridgeToValidated(req) recordInboundNonce {
-        TokenBinding storage binding = _tokensByOm[req.omToken];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.TokenBinding storage binding = s.tokensByOm[req.omToken];
         uint256 refundAmount = _dispatchBridge(binding, req);
 
         _recordCheckpointProgress(req.checkpointId);
@@ -399,42 +413,47 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     }
 
     function _recordCheckpointProgress(uint64 checkpointId) internal {
-        CheckpointTally storage tally = _checkpointTallies[checkpointId];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.CheckpointTally storage tally = s.checkpointTallies[checkpointId];
         tally.completed += 1;
         _tryPruneCheckpoint(checkpointId);
     }
 
     function _tryPruneCheckpoint(uint64 checkpointId) internal {
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         if (!_isCheckpointComplete(checkpointId)) {
             return;
         }
 
-        if (_earliestIncompletedCheckpoint == 0 && _checkpointTallies[0].certified == 0 && checkpointId != 0) {
-            _earliestIncompletedCheckpoint = checkpointId;
+        if (s.earliestIncompletedCheckpoint == 0 && s.checkpointTallies[0].certified == 0 && checkpointId != 0) {
+            s.earliestIncompletedCheckpoint = checkpointId;
         }
 
-        while (_isCheckpointComplete(_earliestIncompletedCheckpoint)) {
-            uint64 finished = _earliestIncompletedCheckpoint;
-            delete _checkpointTallies[finished];
+        while (_isCheckpointComplete(s.earliestIncompletedCheckpoint)) {
+            uint64 finished = s.earliestIncompletedCheckpoint;
+            delete s.checkpointTallies[finished];
             unchecked {
-                _earliestIncompletedCheckpoint = finished + 1;
+                s.earliestIncompletedCheckpoint = finished + 1;
             }
         }
     }
 
     function _isCheckpointComplete(uint64 checkpointId) internal view returns (bool) {
-        CheckpointTally storage tally = _checkpointTallies[checkpointId];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.CheckpointTally storage tally = s.checkpointTallies[checkpointId];
         return tally.certified != 0 && tally.completed >= tally.certified;
     }
 
     function _ensureCheckpointNotCompleted(uint64 checkpointId) internal view {
-        if (checkpointId < _earliestIncompletedCheckpoint) {
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        if (checkpointId < s.earliestIncompletedCheckpoint) {
             revert CheckpointCompletedAndPruned(checkpointId);
         }
     }
 
     function _latestInboundNonceInternal() internal view returns (uint64) {
-        uint64 next = _nextInboundNonce;
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        uint64 next = s.nextInboundNonce;
         if (next == 0) {
             revert InboundNonceUnavailable();
         }
@@ -443,7 +462,7 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
         }
     }
 
-    function _dispatchBridge(TokenBinding storage binding, BridgeToRequest memory req)
+    function _dispatchBridge(OMInteropTypes.TokenBinding storage binding, BridgeToRequest memory req)
         internal
         returns (uint256 refundAmount)
     {
@@ -464,16 +483,17 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     }
 
     function _setRateLimit(address token, uint256 limit, uint256 window) internal {
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         // Clear rate limit if window is 0
         if (window == 0) {
-            delete rateLimitsParam[token];
-            delete rateLimitsData[token];
+            delete s.rateLimitsParam[token];
+            delete s.rateLimitsData[token];
             emit RateLimitsChanged(token, limit, window);
             return;
         }
 
-        RateLimitParam storage rlParam = rateLimitsParam[token];
-        RateLimitData storage rlData = rateLimitsData[token];
+        OMInteropTypes.RateLimitParam storage rlParam = s.rateLimitsParam[token];
+        OMInteropTypes.RateLimitData storage rlData = s.rateLimitsData[token];
 
         rlParam.limit = limit;
         rlParam.window = window;
@@ -484,8 +504,9 @@ contract OMInterop is Ownable, LZInterop, IOMInterop {
     }
 
     function _checkAndUpdateRateLimit(address token, uint256 _amount) internal virtual {
-        RateLimitParam storage rlParam = rateLimitsParam[token];
-        RateLimitData storage rlData = rateLimitsData[token];
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        OMInteropTypes.RateLimitParam storage rlParam = s.rateLimitsParam[token];
+        OMInteropTypes.RateLimitData storage rlData = s.rateLimitsData[token];
 
         // A windows configured as 0 means no rate limiting
         if (rlParam.window == 0) return;

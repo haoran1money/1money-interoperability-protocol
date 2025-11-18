@@ -11,6 +11,7 @@ import {MessagingFee, SendParam} from "@layerzerolabs/oft-evm/contracts/interfac
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
@@ -67,7 +68,16 @@ contract LZInteropTest is TestHelperOz5 {
             SimpleMessageLibMock(payable(endpointSetup.sendLibs[i])).setMessagingFee(0, MOCK_LZ_TOKEN_FEE);
         }
 
-        interop = new OMInterop(OWNER, OPERATOR, RELAYER);
+        OMInterop impl = new OMInterop();
+
+        bytes memory initData = abi.encodeCall(OMInterop.initialize, (OWNER, OPERATOR, RELAYER));
+
+        // Deploy proxy
+        ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
+
+        // Cast proxy to the OMInterop type
+        interop = OMInterop(address(proxy));
+
         proxyAdmin = makeAddr("proxyAdmin");
 
         localOft = _deployOmoftProxy("MockOMToken", "MOMT", endpoints[LOCAL_EID], address(interop), address(this));
@@ -100,9 +110,7 @@ contract LZInteropTest is TestHelperOz5 {
         address implementation;
         assembly {
             implementation := create(0, add(bytecode, 0x20), mload(bytecode))
-            if iszero(extcodesize(implementation)) {
-                revert(0, 0)
-            }
+            if iszero(extcodesize(implementation)) { revert(0, 0) }
         }
 
         return OMOFT(address(new TransparentUpgradeableProxy(implementation, proxyAdmin, initData)));

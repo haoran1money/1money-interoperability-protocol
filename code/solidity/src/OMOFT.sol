@@ -37,21 +37,11 @@ contract OMOFT is OFTUpgradeable {
         uint256 amountLd,
         uint256 minAmountLd,
         uint32 dstEid
-    )
-        internal
-        virtual
-        override
-        onlyOmInterop
-        returns (uint256 amountSentLd, uint256 amountReceivedLd)
-    {
+    ) internal virtual override onlyOmInterop returns (uint256 amountSentLd, uint256 amountReceivedLd) {
         (amountSentLd, amountReceivedLd) = _debitView(amountLd, minAmountLd, dstEid);
     }
 
-    function _credit(
-        address to,
-        uint256 amountLd,
-        uint32 /*srcEid*/
-    )
+    function _credit(address to, uint256 amountLd, uint32 /*srcEid*/ )
         internal
         virtual
         override

@@ -6,7 +6,7 @@ use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::Result;
-use onemoney_interop::contract::OMInterop;
+use onemoney_interop::contract::{deploy_uups_like, OMInterop};
 use onemoney_protocol::{Authority, Client as OnemoneyClient};
 use rstest::fixture;
 
@@ -80,13 +80,15 @@ async fn setup_e2e_test_context() -> Result<E2ETestContext> {
         .get_receipt()
         .await?;
 
-    let contract = OMInterop::deploy(
-        owner_provider,
+    let contract = deploy_uups_like(
+        &owner_provider,
         owner_wallet.address(),
         operator_address,
         relayer_address,
     )
-    .await?;
+    .await?
+    .1;
+
     let contract_addr = *contract.address();
     let operator_contract = OMInterop::new(contract_addr, operator_provider);
 

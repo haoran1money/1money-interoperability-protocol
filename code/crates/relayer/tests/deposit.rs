@@ -237,7 +237,7 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
         &onemoney_client,
         sender,
         token_address,
-        initial_sender_balance - withdrawal_amount,
+        initial_sender_balance - withdrawal_amount - fee_amount,
     )
     .await?;
 
@@ -280,7 +280,7 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
             &onemoney_client,
             sender,
             token_address,
-            initial_sender_balance - withdrawal_amount + fee_amount,
+            initial_sender_balance - withdrawal_amount,
         )
         .await?;
 

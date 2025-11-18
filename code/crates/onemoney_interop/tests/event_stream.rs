@@ -5,6 +5,7 @@ use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::PrivateKeySigner;
 use futures::StreamExt;
+use onemoney_interop::contract::deploy_uups_like;
 use onemoney_interop::contract::OMInterop::{self, OMInteropEvents};
 use onemoney_interop::error::Error as OMInteropError;
 use onemoney_interop::event::{event_stream, OMInteropLog};
@@ -67,13 +68,10 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
         .wallet(new_relayer_wallet)
         .connect_http(http_endpoint.clone());
 
-    let contract = OMInterop::deploy(
-        owner_provider.clone(),
-        owner_addr,
-        operator_addr,
-        relayer_addr,
-    )
-    .await?;
+    let contract = deploy_uups_like(&owner_provider, owner_addr, operator_addr, relayer_addr)
+        .await?
+        .1;
+
     let contract_addr = *contract.address();
     info!(?contract_addr, "deployed OMInterop contract");
 
@@ -89,6 +87,14 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
     let mut stream = event_stream(http_endpoint, ws_endpoint, contract_addr, 0).await;
     debug!("subscribed to OMInterop event stream");
 
+    let upgraded_contract = next_event(&mut stream).await;
+    match upgraded_contract {
+        OMInterop::OMInteropEvents::Upgraded(event) => {
+            info!(?event, "upgraded event");
+        }
+        e => panic!("unexpected upgraded event variant: {e:?}"),
+    }
+
     let ownership_transferred = next_event(&mut stream).await;
     match ownership_transferred {
         OMInterop::OMInteropEvents::OwnershipTransferred(event) => {
@@ -96,7 +102,7 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
             assert_eq!(event.newOwner, owner_addr);
             info!(?owner_addr, "ownership transferred");
         }
-        _ => panic!("unexpected ownership event variant"),
+        e => panic!("unexpected ownership event variant: {e:?}"),
     }
 
     let initial_operator = next_event(&mut stream).await;
@@ -124,6 +130,14 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
         .get_receipt()
         .await?;
     debug!("setRateLimit transaction confirmed");
+
+    let initialized_contract = next_event(&mut stream).await;
+    match initialized_contract {
+        OMInterop::OMInteropEvents::Initialized(event) => {
+            info!(?event, "initialized event");
+        }
+        e => panic!("unexpected initialized event variant: {e:?}"),
+    }
 
     let updated_rate_limit = next_event(&mut stream).await;
     debug!("received updated_rate_limit event");

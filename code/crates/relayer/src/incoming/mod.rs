@@ -156,6 +156,24 @@ pub async fn relay_incoming_events(
                     "Ignoring RateLimitsChanged event"
                 );
             }
+            OMInterop::OMInteropEvents::Initialized(_) => {
+                warn!(
+                    ?block_number,
+                    ?log_index,
+                    ?tx_hash,
+                    address = ?log.address,
+                    "Ignoring Initialized event"
+                );
+            }
+            OMInterop::OMInteropEvents::Upgraded(_) => {
+                warn!(
+                    ?block_number,
+                    ?log_index,
+                    ?tx_hash,
+                    address = ?log.address,
+                    "Ignoring Upgraded event"
+                );
+            }
         }
     }
 

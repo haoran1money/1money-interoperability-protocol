@@ -195,7 +195,7 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
                 &onemoney_client,
                 sender,
                 token_address,
-                balance_before_tx - withdrawal_amount_1 + fee_amount,
+                balance_before_tx - withdrawal_amount_1,
             )
             .await?;
 
@@ -263,7 +263,7 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
                 &onemoney_client,
                 sender,
                 token_address,
-                balance_before_tx - withdrawal_amount_2 + fee_amount,
+                balance_before_tx - withdrawal_amount_2,
             )
             .await?;
 
@@ -502,7 +502,7 @@ async fn test_clear_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Re
             })
             .await??;
 
-            let expected_balance = balance_before_tx - withdrawal_amount + fee_amount;
+            let expected_balance = balance_before_tx - withdrawal_amount;
 
             info!(
                 ?sender,

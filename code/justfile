@@ -7,13 +7,13 @@ precommit: fmt-check lint build check-tests
 fmt-check:
 	cargo +nightly fmt --all --check
 	taplo fmt --check
-	deno fmt --check ../.github/**/*.yaml ../.github/**/*.yml ../docs/{testnet,sidechain}.md
+	deno fmt --check ../.github/**/*.yaml ../.github/**/*.yml ../docs/{devnet,sidechain}.md
 
 # Format all project files
 fmt:
 	cargo +nightly fmt --all
 	taplo fmt
-	deno fmt ../.github/**/*.yaml ../.github/**/*.yml ../docs/{testnet,sidechain}.md
+	deno fmt ../.github/**/*.yaml ../.github/**/*.yml ../docs/{devnet,sidechain}.md
 
 # Lint all components
 lint:

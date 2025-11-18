@@ -1,4 +1,4 @@
-# Onemoney Interoperability Protocol - Testnet Setup Guide
+# Onemoney Interoperability Protocol - Devnet Setup Guide
 
 Run every command from the `1money-interoperability-protocol` repo root.
 
@@ -6,7 +6,7 @@ Run every command from the `1money-interoperability-protocol` repo root.
 
 - l1client tools are built and available on `PATH`.
   - Example: `export PATH=$PATH:$PATH_TO_L1CLIENT_DIR/target/debug`
-- 1money testnet, running 1money endpoint at `http://127.0.0.1:18555` by
+- 1money devnet, running 1money endpoint at `http://127.0.0.1:18555` by
   `./testnet.sh -d`.
   - Pass `--min-tx-to-checkpoint 1` in
     [`./testnet.sh`](https://github.com/1Money-Co/l1client/blob/c407fcf6571468935f4cc041998ceac16a00daea/testnet.sh#L41)
@@ -38,7 +38,7 @@ SIDECHAIN_WS=http://127.0.0.1:8646
 PROFILE=interop-demo
 TOKEN_SYMBOL=OMTST$(date +%s)
 TOKEN_NAME=Interop_Demo_Token
-TOKEN_DECIMALS=6
+TOKEN_DECIMALS=18 # use same decimals as sidechain's ERC20 token
 BRIDGE_AMOUNT=750
 ESCROW_FEE=5
 OM_ACCOUNTS_DIR=$(pwd)/code/scripts/.manual/accounts

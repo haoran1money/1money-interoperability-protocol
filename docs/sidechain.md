@@ -1,6 +1,6 @@
-# Local Sidechain Testnet
+# Local Sidechain Devnet
 
-Spin up the sidechain testnet with custom 1money L1 validator keys.
+Spin up the sidechain devnet with custom 1money L1 validator keys.
 
 ## Collect validator private keys
 
@@ -25,7 +25,7 @@ cd emerald
 make build # builds cargo binaries and solidity contracts
 ```
 
-## Generate testnet configuration
+## Generate devnet configuration
 
 Create `.testnet` with your keys (example uses the ones above):
 
@@ -92,10 +92,7 @@ bash scripts/spawn.bash --nodes 4 --home nodes --no-delay
 This builds the binary, starts all nodes, logs to
 `nodes/{0,1,2,3}/logs/node.log`, and keeps running until you press Ctrl+C.
 
-## Monitor metrics
+## Utilities
 
-Grafana dashboards are available at http://localhost:3000.
-
-## Block explorer
-
-Otterscan is available at http://localhost:80.
+- Otterscan block explorer is available at http://localhost:80
+- Grafana dashboards are available at http://localhost:3000

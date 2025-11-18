@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 use alloy_primitives::Bytes;
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::OMInterop;
-use onemoney_protocol::{Transaction, TxPayload};
+use onemoney_protocol::{Client, Transaction, TxPayload};
 use tracing::debug;
 
 use crate::config::{Config, RelayerNonce};
@@ -56,6 +56,8 @@ pub async fn process_burn_and_bridge_transactions(
 
     let contract = OMInterop::new(config.interop_contract_address, provider);
 
+    let client = Client::custom(config.one_money_node_url.to_string())?;
+
     let TxPayload::TokenBurnAndBridge {
         value,
         sender,
@@ -73,13 +75,29 @@ pub async fn process_burn_and_bridge_transactions(
 
     let checkpoint_number = tx.checkpoint_number.ok_or(Error::MissingCheckpointNumber)?;
 
-    // TODO: Replace this with correct `bbnonce` once it is added to the `Transaction`
-    // We should validate the bbnonce from the burn transaction matches the bbnonce at side-chain.
-    let bbnonce = contract
-        .getLatestProcessedNonce(sender)
-        .call()
-        .block("pending".parse().unwrap())
+    let burn_and_bridge_receipt = client
+        .get_transaction_receipt_by_hash(&tx.hash.to_string())
         .await?;
+
+    // The bbnonce in the BurnAndBridge receipt is the account's next nonce,
+    // so we subtract 1 to get the current nonce.
+    let bbnonce = burn_and_bridge_receipt
+        .success_info
+        .ok_or_else(|| {
+            Error::Generic(format!(
+                "missing `success_info` in BurnAndBridge receipt for transaction `{}`",
+                tx.hash
+            ))
+        })?
+        .bridge_info
+        .ok_or_else(|| {
+            Error::Generic(format!(
+                "missing `bridge_info` in BurnAndBridge receipt for transaction `{}`",
+                tx.hash
+            ))
+        })?
+        .bbnonce
+        - 1;
 
     // TODO: Handle bridgeData when it is added to the TokenBurnAndBridge.
     // For now, we pass an empty bytes array.

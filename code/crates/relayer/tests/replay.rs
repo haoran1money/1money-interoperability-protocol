@@ -184,7 +184,6 @@ async fn cross_chain_replay_flow_is_enforced(
         .checked_sub(post_burn_balance)
         .expect("burn burned more than available balance");
 
-    // Only count bridge_amount here; the refund was sent to the relayer in Step 2a.
     assert_eq!(
         burn_delta,
         bridge_amount + refund_amount,

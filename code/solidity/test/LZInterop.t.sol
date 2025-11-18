@@ -2,6 +2,7 @@
 pragma solidity ^0.8.22;
 
 import {OMInterop} from "../src/OMInterop.sol";
+import {LZInterop} from "../src/LZInterop.sol";
 import {IOMInterop, InteropProtocol} from "../src/IOMInterop.sol";
 import {OMOFT} from "../src/OMOFT.sol";
 import {OFT} from "@layerzerolabs/oft-evm/contracts/OFT.sol";
@@ -9,6 +10,7 @@ import {OptionsBuilder} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/Option
 import {MessagingFee, SendParam} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
@@ -27,10 +29,19 @@ contract PlainOFT is Ownable, OFT {
     }
 }
 
-contract OMInteropTest is TestHelperOz5 {
+contract MockLzToken is ERC20 {
+    constructor() ERC20("MockLZ", "MLZ") {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+contract LZInteropTest is TestHelperOz5 {
     uint32 private constant LOCAL_EID = 1;
     uint32 private constant REMOTE_EID = 2;
     uint256 private constant BRIDGE_AMOUNT = 1e18;
+    uint256 private constant MOCK_LZ_TOKEN_FEE = 5e15;
 
     address internal constant OWNER = address(0xA11CE);
     address internal constant OPERATOR = address(0xB0B);
@@ -42,14 +53,19 @@ contract OMInteropTest is TestHelperOz5 {
     PlainOFT internal remoteOft;
     address internal sidechainToken;
     address internal proxyAdmin;
+    MockLzToken internal lzToken;
 
     function setUp() public virtual override {
         super.setUp();
 
         setUpEndpoints(2, LibraryType.SimpleMessageLib);
 
-        SimpleMessageLibMock(payable(endpointSetup.sendLibs[0])).setMessagingFee(0, 0);
-        SimpleMessageLibMock(payable(endpointSetup.sendLibs[1])).setMessagingFee(0, 0);
+        lzToken = new MockLzToken();
+
+        for (uint256 i = 0; i < endpointSetup.endpointList.length; i++) {
+            endpointSetup.endpointList[i].setLzToken(address(lzToken));
+            SimpleMessageLibMock(payable(endpointSetup.sendLibs[i])).setMessagingFee(0, MOCK_LZ_TOKEN_FEE);
+        }
 
         interop = new OMInterop(OWNER, OPERATOR, RELAYER);
         proxyAdmin = makeAddr("proxyAdmin");
@@ -66,6 +82,8 @@ contract OMInteropTest is TestHelperOz5 {
 
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, sidechainToken, InteropProtocol.LayerZero);
+
+        lzToken.mint(RELAYER, 1e21);
     }
 
     function _deployOmoftProxy(
@@ -132,6 +150,7 @@ contract OMInteropTest is TestHelperOz5 {
 
         // manually inspect event logs due to issues in expectEmit with cross call and multiple events.
         Vm.Log[] memory logs = vm.getRecordedLogs();
+        require(logs.length > 1, "expected OMInteropReceived log");
         Vm.Log memory entry = logs[1]; // second log is from OMInterop
 
         bytes32 expectedSig = keccak256("OMInteropReceived(uint64,address,uint256,address,uint32)");
@@ -161,11 +180,61 @@ contract OMInteropTest is TestHelperOz5 {
 
         address remoteRecipient = address(0xCAFEBABE);
         uint256 amountToSend = BRIDGE_AMOUNT;
+        uint256 minAmountLd = amountToSend;
+        uint128 maxGas = 200_000;
+        bytes memory bridgeData = abi.encode(maxGas, minAmountLd);
+
+        // Invalid bridgeData should revert with custom error before fee checks.
+        vm.expectRevert(LZInterop.InvalidBridgeData.selector);
+        vm.prank(RELAYER);
+        interop.bridgeTo(address(0xAA), 0, remoteRecipient, amountToSend, REMOTE_EID, 0, OM_TOKEN, checkpointId, "");
 
         assertEq(remoteOft.balanceOf(remoteRecipient), 0, "remote recipient should start with zero balance");
 
+        (uint256 bridgeFee, address feeToken) = interop.quoteBridgeTo(
+            address(0xAA), 0, remoteRecipient, amountToSend, REMOTE_EID, 0, OM_TOKEN, checkpointId, bridgeData
+        );
+        assertEq(feeToken, address(lzToken), "bridge fee token should be ZRO");
+        assertGt(bridgeFee, 0, "bridge fee should use ZRO tokens");
+
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0xAA), 0, remoteRecipient, amountToSend, REMOTE_EID, 0, OM_TOKEN, checkpointId);
+        lzToken.approve(address(interop), type(uint256).max);
+
+        uint256 relayerLzBefore = lzToken.balanceOf(RELAYER);
+        uint256 omLzBefore = lzToken.balanceOf(address(interop));
+        vm.recordLogs();
+        vm.prank(RELAYER);
+        interop.bridgeTo(
+            address(0xAA),
+            0,
+            remoteRecipient,
+            amountToSend,
+            REMOTE_EID,
+            bridgeFee * 2,
+            OM_TOKEN,
+            checkpointId,
+            bridgeData
+        );
+        uint256 relayerLzAfter = lzToken.balanceOf(RELAYER);
+        assertEq(relayerLzBefore - relayerLzAfter, MOCK_LZ_TOKEN_FEE, "relayer should fund LZ fee");
+        uint256 omLzAfter = lzToken.balanceOf(address(interop));
+        assertEq(omLzAfter, omLzBefore, "OMInterop should not retain LZ tokens");
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        require(logs.length > 6, "expected OMInteropSent log");
+        Vm.Log memory entry = logs[6]; // seventh log is OMInteropSent
+        bytes32 sentSig = keccak256("OMInteropSent(uint64,address,uint256,address,uint32)");
+        assertEq(entry.emitter, address(interop), "OMInteropSent emitter mismatch");
+        assertEq(entry.topics.length, 3, "OMInteropSent topics length mismatch");
+        assertEq(entry.topics[0], sentSig, "log 6 should be OMInteropSent");
+        address from = address(uint160(uint256(entry.topics[1])));
+        address omToken = address(uint160(uint256(entry.topics[2])));
+        assertEq(from, address(0xAA), "OMInteropSent from mismatch");
+        assertEq(omToken, OM_TOKEN, "OMInteropSent token mismatch");
+        (uint64 nonce_, uint256 refundAmount, uint32 dstChainId) = abi.decode(entry.data, (uint64, uint256, uint32));
+        assertEq(dstChainId, REMOTE_EID, "OMInteropSent chain mismatch");
+        assertEq(refundAmount, 0, "refund should be zero for LayerZero");
+        uint64 latestNonce = interop.getLatestInboundNonce();
+        assertEq(nonce_ + 1, latestNonce, "event nonce should match latest inbound");
 
         verifyPackets(REMOTE_EID, addressToBytes32(address(remoteOft)));
 

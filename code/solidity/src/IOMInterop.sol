@@ -1,6 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.22;
 
+struct BridgeToRequest {
+    address from;
+    uint64 bbNonce;
+    address to;
+    uint256 amount;
+    uint32 dstChainId;
+    uint256 escrowFee;
+    address omToken;
+    uint64 checkpointId;
+    bytes bridgeData;
+}
+
 enum InteropProtocol {
     LayerZero, // 0
     // TODO: remove this in production
@@ -32,6 +44,7 @@ interface IOMInterop {
     /// @param escrowFee Portion of escrowed fee to refund to `from`.
     /// @param omToken Token address on the payment network.
     /// @param checkpointId Checkpoint that certified the originating BurnAndBridge.
+    /// @param bridgeData Protocol-specific bytes to tune the bridge call (e.g. gas limits or slippage).
     function bridgeTo(
         address from,
         uint64 bbNonce,
@@ -40,8 +53,33 @@ interface IOMInterop {
         uint32 dstChainId,
         uint256 escrowFee,
         address omToken,
-        uint64 checkpointId
+        uint64 checkpointId,
+        bytes calldata bridgeData
     ) external;
+
+    /// @notice Quotes the bridge fee for a potential `bridgeTo` request without changing state.
+    /// @param from 1Money account burning funds on the payment lane.
+    /// @param bbNonce Sequential BurnAndBridge nonce supplied by the relayer.
+    /// @param to Recipient on the external chain.
+    /// @param amount Amount to bridge out.
+    /// @param dstChainId Destination chain identifier understood by the bridge.
+    /// @param escrowFee Portion of escrowed fee to refund to `from`.
+    /// @param omToken Token address on the payment network.
+    /// @param checkpointId Checkpoint that certified the originating BurnAndBridge.
+    /// @param bridgeData Protocol-specific bytes to tune the bridge call (e.g. gas limits or slippage).
+    /// @return bridgeFee Estimated fee charged by the bridge.
+    /// @return feeToken Address of the token the bridge expects for the fee.
+    function quoteBridgeTo(
+        address from,
+        uint64 bbNonce,
+        address to,
+        uint256 amount,
+        uint32 dstChainId,
+        uint256 escrowFee,
+        address omToken,
+        uint64 checkpointId,
+        bytes calldata bridgeData
+    ) external view returns (uint256 bridgeFee, address feeToken);
 
     /// @notice Updates the contract with the number of certified BurnAndBridge instructions in a checkpoint.
     /// @param checkpointId Identifier of the payment-network checkpoint.

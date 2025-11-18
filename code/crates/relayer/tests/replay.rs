@@ -4,7 +4,7 @@ mod utils;
 use core::future::Future;
 
 use alloy_primitives::hex::ToHexExt;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::ProviderBuilder;
 use color_eyre::eyre::Result;
 use onemoney_interop::contract::OMInterop;
@@ -250,6 +250,7 @@ async fn cross_chain_replay_flow_is_enforced(
             refund_amount,
             token_address,
             checkpoint_id,
+            Bytes::new(),
         )
         .send()
         .await?
@@ -266,6 +267,7 @@ async fn cross_chain_replay_flow_is_enforced(
             refund_amount,
             token_address,
             checkpoint_id,
+            Bytes::new(),
         )
         .send()
         .await;

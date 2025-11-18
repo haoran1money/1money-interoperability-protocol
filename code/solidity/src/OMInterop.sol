@@ -2,16 +2,14 @@
 pragma solidity ^0.8.22;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {IOFT, SendParam} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
-import {OptionsBuilder} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
-import {MessagingFee} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
-import {IOMInterop, InteropProtocol} from "./IOMInterop.sol";
+import {IOMInterop, InteropProtocol, BridgeToRequest} from "./IOMInterop.sol";
+import {LZInterop} from "./LZInterop.sol";
 
 /**
  * @title OMInterop
  * @notice The interoperability contract described in ADR-001 with Ownable access control.
  */
-contract OMInterop is Ownable, IOMInterop {
+contract OMInterop is Ownable, LZInterop, IOMInterop {
     struct TokenBinding {
         address omToken;
         address scToken;
@@ -22,17 +20,6 @@ contract OMInterop is Ownable, IOMInterop {
     struct CheckpointTally {
         uint32 certified;
         uint32 completed;
-    }
-
-    struct BridgeToRequest {
-        address from;
-        uint64 bbNonce;
-        address to;
-        uint256 amount;
-        uint32 dstChainId;
-        uint256 escrowFee;
-        address omToken;
-        uint64 checkpointId;
     }
 
     struct RateLimitParam {
@@ -59,6 +46,7 @@ contract OMInterop is Ownable, IOMInterop {
     error InboundNonceUnavailable();
     error UnknownInteropProto(InteropProtocol interopProtoId);
     error RateLimitExceeded();
+    error EscrowFeeTooLow(uint256 provided, uint256 required);
 
     /// @notice Temporary constant for the source chain identifier.
     uint32 internal constant SRC_CHAIN_ID = 1;
@@ -183,7 +171,8 @@ contract OMInterop is Ownable, IOMInterop {
         uint32 dstChainId,
         uint256 escrowFee,
         address omToken,
-        uint64 checkpointId
+        uint64 checkpointId,
+        bytes calldata bridgeData
     ) external override onlyRelayer checkpointNotCompleted(checkpointId) {
         BridgeToRequest memory req = BridgeToRequest({
             from: from,
@@ -193,10 +182,39 @@ contract OMInterop is Ownable, IOMInterop {
             dstChainId: dstChainId,
             escrowFee: escrowFee,
             omToken: omToken,
-            checkpointId: checkpointId
+            checkpointId: checkpointId,
+            bridgeData: bridgeData
         });
 
         _bridgeTo(req);
+    }
+
+    /// @inheritdoc IOMInterop
+    function quoteBridgeTo(
+        address from,
+        uint64 bbNonce,
+        address to,
+        uint256 amount,
+        uint32 dstChainId,
+        uint256 escrowFee,
+        address omToken,
+        uint64 checkpointId,
+        bytes calldata bridgeData
+    ) public view override returns (uint256 bridgeFee, address feeToken) {
+        BridgeToRequest memory req = BridgeToRequest({
+            from: from,
+            bbNonce: bbNonce,
+            to: to,
+            amount: amount,
+            dstChainId: dstChainId,
+            escrowFee: escrowFee,
+            omToken: omToken,
+            checkpointId: checkpointId,
+            bridgeData: bridgeData
+        });
+
+        _quoteBridgeToValidated(req);
+        (bridgeFee, feeToken) = _quoteBridgeTo(req);
     }
 
     /// @inheritdoc IOMInterop
@@ -335,7 +353,32 @@ contract OMInterop is Ownable, IOMInterop {
         }
     }
 
+    function _quoteBridgeTo(BridgeToRequest memory req) internal view returns (uint256 bridgeFee, address feeToken) {
+        TokenBinding storage binding = _tokensByOm[req.omToken];
+        (bridgeFee, feeToken) = _quoteBridgeTo(binding, req);
+    }
+
+    function _quoteBridgeTo(TokenBinding storage binding, BridgeToRequest memory req)
+        internal
+        view
+        returns (uint256 bridgeFee, address feeToken)
+    {
+        InteropProtocol protoId = binding.interopProtoId;
+        if (protoId == InteropProtocol.LayerZero) {
+            (bridgeFee, feeToken) = _quoteLayerZero(binding.scToken, req);
+        } else if (protoId == InteropProtocol.Mock) {
+            (bridgeFee, feeToken) = (0, address(0));
+        } else {
+            revert UnknownInteropProto(protoId);
+        }
+    }
+
     function _bridgeToValidated(BridgeToRequest memory req) internal {
+        _quoteBridgeToValidated(req);
+        _enforceSequentialNonce(req.from, req.bbNonce);
+    }
+
+    function _quoteBridgeToValidated(BridgeToRequest memory req) internal view {
         _ensureCheckpointNotCompleted(req.checkpointId);
         _revertIfZeroAddress(req.from);
         _revertIfZeroAddress(req.to);
@@ -343,16 +386,16 @@ contract OMInterop is Ownable, IOMInterop {
         _revertIfZeroAmount(req.amount);
         _revertIfInvalidChain(req.dstChainId);
         _revertIfUnknownOmToken(req.omToken);
-        _enforceSequentialNonce(req.from, req.bbNonce);
         _revertIfCheckpointComplete(req.checkpointId);
     }
 
     function _bridgeTo(BridgeToRequest memory req) internal bridgeToValidated(req) recordInboundNonce {
-        _recordCheckpointProgress(req.checkpointId);
         TokenBinding storage binding = _tokensByOm[req.omToken];
-        _dispatchBridge(binding, req);
+        uint256 refundAmount = _dispatchBridge(binding, req);
 
-        emit OMInteropSent(_latestInboundNonceInternal(), req.from, req.escrowFee, req.omToken, req.dstChainId);
+        _recordCheckpointProgress(req.checkpointId);
+
+        emit OMInteropSent(_latestInboundNonceInternal(), req.from, refundAmount, req.omToken, req.dstChainId);
     }
 
     function _recordCheckpointProgress(uint64 checkpointId) internal {
@@ -400,36 +443,20 @@ contract OMInterop is Ownable, IOMInterop {
         }
     }
 
-    function _dispatchBridge(TokenBinding storage binding, BridgeToRequest memory req) internal {
+    function _dispatchBridge(TokenBinding storage binding, BridgeToRequest memory req)
+        internal
+        returns (uint256 refundAmount)
+    {
         InteropProtocol protoId = binding.interopProtoId;
         if (protoId == InteropProtocol.LayerZero) {
             _bridgeWithLayerZero(binding.scToken, req);
+            // TODO: implement logic for refunds once the LayerZero refund mechanics are finalized.
+            refundAmount = 0;
         } else if (protoId == InteropProtocol.Mock) {
-            // no-op for testing purposes
+            refundAmount = req.escrowFee;
         } else {
             revert UnknownInteropProto(protoId);
         }
-    }
-
-    function _bridgeWithLayerZero(address oftToken, BridgeToRequest memory req) internal {
-        bytes memory options = OptionsBuilder.newOptions();
-        options = OptionsBuilder.addExecutorLzReceiveOption(options, 200000, 0);
-
-        SendParam memory sendParam = SendParam({
-            dstEid: req.dstChainId,
-            to: _addressToBytes32(req.to),
-            amountLD: req.amount,
-            minAmountLD: req.amount,
-            extraOptions: options,
-            composeMsg: bytes(""),
-            oftCmd: bytes("")
-        });
-
-        IOFT(oftToken).send(sendParam, MessagingFee({nativeFee: 0, lzTokenFee: 0}), req.from);
-    }
-
-    function _addressToBytes32(address account) internal pure returns (bytes32) {
-        return bytes32(uint256(uint160(account)));
     }
 
     function setRateLimit(address token, uint256 limit, uint256 window) external onlyOperator {

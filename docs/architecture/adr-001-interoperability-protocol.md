@@ -173,7 +173,10 @@ Notes:
 * The `amount` indicates the total amount including the payment network fees (i.e., `fee`) and the `escrowFee`.
   The amount burned and bridged to the destination chain is `amount - fee - escrowFee`.
 * Burning decreases the token's total supply
-* The `escrowFee` is transferred to the Permissioned Relayer account. 
+* The `escrowFee` is transferred to the Permissioned Relayer account. The relayer calls `quoteBridgeTo` to learn the
+  protocol fee and fee token needed to execute the bridge, converts escrowed funds off-chain if required, and refunds
+  any unused portion back to the user.
+* The relayer or validator should call `quoteBridgeTo` before submitting the originating `BurnAndBridge` to calculate the escrow.
 * The `dstChainId` is specific to the cross-chain communication protocol and is public information 
   (see [here](https://wormhole.com/docs/products/reference/chain-ids/) for Wormhole
   and [here](https://docs.layerzero.network/v2/deployments/deployed-contracts) for LayerZero).
@@ -193,7 +196,10 @@ At a minimum, `OMInterop.sol` should define the following events and external fu
   of the corresponding cross-chain protocol was successful.
 * `function bridgeFrom` called by the Customized Token Transfer Contracts instead of mint. The function emits `OMInteropReceived`.
 * `function bridgeTo` called by the Permissioned Relayer. The function calls the `send()` function of the corresponding 
-  cross-chain token transfer protocol and emits `OMInteropSent`. 
+  cross-chain token transfer protocol, accepts protocol-specific `bridgeData` bytes (e.g., LayerZero gas limits or
+  slippage parameters), and emits `OMInteropSent` to surface the amount that remains for refunding the user.
+* `function quoteBridgeTo` takes the same arguments as `bridgeTo` and returns the bridge fee and fee token without
+  mutating state.
 * `function updateCheckpointInfo` called by the Permissioned Relayer to update the sidechain's view on the latest 
   payment network checkpoint.
 
@@ -241,7 +247,21 @@ Every token mapping records which `InteropProtocol` handles the pair so the cont
             uint256 escrowFee,
             address omToken,
             uint64 checkpointId,
+            bytes calldata bridgeData // protocol-specific tuning data (e.g. gas limits)
         ) external;
+
+        // quoteBridgeTo takes the same parameters as bridgeTo but performs no state changes
+        function quoteBridgeTo(
+            address from,
+            uint64 bbNonce,
+            address to,
+            uint256 amount,
+            uint32 dstChainId,
+            uint256 escrowFee,
+            address omToken,
+            uint64 checkpointId,
+            bytes calldata bridgeData
+        ) external view returns (uint256 bridgeFee, address feeToken);
 
         function updateCheckpointInfo(
             uint64 checkpointId,
@@ -323,7 +343,11 @@ To avoid scenarios where the fee is under-estimated and the relayer needs to cov
 the `BurnAndBridge` instruction overestimates the cross-chain transfer fee (see `escrowFee`). 
 This fee is transferred to the relayer account. 
 Once the matching `bridgeTo` transaction completes successfully (i.e., `OMInteropSent` is emitted),
-the relayer uses the `from` and `refundAmount` from the emitted `OMInteropSent` event to refund the user the unused fee.
+`OMInterop.sol` invokes `quoteBridgeTo` to determine the actual bridge fee and fee token so the relayer can reconcile the
+escrow off-chain before submitting the call.
+For LayerZero transfers `quoteBridgeTo` queries `quoteSend` and surfaces the fee denominated in the LayerZero token; the
+relayer converts the escrowed OM tokens as needed, approves the OMInterop contract to pull the fee token, and the
+contract spends it when invoking the underlying OFT `send()` call.
 The relayer does this through a regular `Transfer` instruction.
 
 #### Submit Payment Network Transaction 
@@ -332,8 +356,8 @@ The relayer must submit both `MintToForBridge` and `Transfer` instructions to th
 As the relayer must sign both of these instructions, it must use a nonce that is strictly increasing without gaps. 
 To ensure that no nonces are missed even if the relayer crashes, the 1Money Interop Contract maintains the nonce 
 in its state and increments it for every event emitted (either `OMInteropReceived` or `OMInteropSent`).
-Note that when emitting `OMInteropSent`, if `refundAmount` is zero, then the `nonce` is not incremented 
-as the Permissioned Relayer doesn't need to refund the user via a `Transfer` instruction.
+Even when `refundAmount` is zero the nonce still advances; the relayer simply skips submitting a `Transfer` instruction
+for that event but continues processing subsequent nonces in order.
 
 Given that the relayer is permissioned, it doesn't need to pay fees to submit transactions to the payment network. 
 
@@ -506,9 +530,11 @@ If the relayer crashes at step 4. the mapping needs to be updated when the relay
 ## Invariants
 
 * Every successful `BurnAndBridge` on the payment network will eventually 
-  result in a matching successful call to `bridgeTo()` on the sidechain. 
+  result in a matching successful call to `bridgeTo()` on the sidechain, provided the relayer converts the escrow
+  into the fee token reported by `quoteBridgeTo` and supplies enough to cover the bridge before executing.
   * This entails the following invariant: 
-    Calls to `bridgeTo()` from the Permissioned Relayer cannot revert.
+    The relayer must call `quoteBridgeTo` before finalizing each `BurnAndBridge` so it can provision fee tokens; once
+    escrow enforcement lands, an underfunded escrow will trigger `EscrowFeeTooLow`.
 * Every emission of `OMInteropSent` on the sidechain, with `refundAmount > 0`, will eventually
   result in a matching certified `Transfer` instruction (on the payment network) that refunds the user.
 * Every cross-chain token successfully received on the sidechain will eventually 

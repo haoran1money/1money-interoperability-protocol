@@ -1,5 +1,6 @@
 use core::sync::atomic::Ordering;
 
+use alloy_primitives::Bytes;
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::OMInterop;
 use onemoney_protocol::{Transaction, TxPayload};
@@ -80,6 +81,10 @@ pub async fn process_burn_and_bridge_transactions(
         .block("pending".parse().unwrap())
         .await?;
 
+    // TODO: Handle bridgeData when it is added to the TokenBurnAndBridge.
+    // For now, we pass an empty bytes array.
+    let bridge_data = Bytes::new();
+
     let tx_receipt = contract
         .bridgeTo(
             sender,
@@ -90,6 +95,7 @@ pub async fn process_burn_and_bridge_transactions(
             escrow_fee.parse()?,
             token,
             checkpoint_number,
+            bridge_data,
         )
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()

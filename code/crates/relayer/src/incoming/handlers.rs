@@ -1,12 +1,17 @@
+use core::sync::atomic::Ordering;
+
 use alloy_primitives::hex::ToHexExt;
 use alloy_primitives::{Address, B256};
+use alloy_provider::ProviderBuilder;
 use alloy_signer_local::PrivateKeySigner;
 use onemoney_interop::contract::OMInterop::{OMInteropReceived, OMInteropSent};
+use onemoney_interop::contract::TxHashMapping;
 use onemoney_protocol::client::http::Client;
 use onemoney_protocol::responses::TransactionResponse;
 use onemoney_protocol::{PaymentPayload, TokenBridgeAndMintPayload};
 use tracing::{debug, warn};
 
+use crate::config::{Config, RelayerNonce};
 use crate::incoming::error::Error as IncomingError;
 
 pub struct Relayer1MoneyContext<'a> {
@@ -87,6 +92,8 @@ impl<'a> Relayer1MoneyContext<'a> {
 
     pub async fn handle_om_interop_received(
         &self,
+        config: &Config,
+        relayer_nonce: RelayerNonce,
         OMInteropReceived {
             nonce: sidechain_nonce,
             to,
@@ -96,6 +103,21 @@ impl<'a> Relayer1MoneyContext<'a> {
         }: OMInteropReceived,
         source_tx_hash: B256,
     ) -> Result<TransactionResponse, IncomingError> {
+        let provider = ProviderBuilder::new()
+            .wallet(config.relayer_private_key.clone())
+            .connect_http(config.side_chain_http_url.clone());
+        let mapping_contract = TxHashMapping::new(config.tx_mapping_contract_address, provider);
+
+        debug!(bridgeFromHash = %source_tx_hash, "Will register deposit transaction hash");
+
+        mapping_contract
+            .registerDeposit(source_tx_hash)
+            .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
+            .send()
+            .await?
+            .get_receipt()
+            .await?;
+
         let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
 
         let payload = TokenBridgeAndMintPayload {
@@ -110,22 +132,42 @@ impl<'a> Relayer1MoneyContext<'a> {
             bridge_metadata: None,
         };
 
-        Ok(self
+        let tx_response = self
             .client
             .bridge_and_mint(payload, self.private_key())
-            .await?)
+            .await?;
+
+        debug!(bridgeFromHash = %source_tx_hash, bridgeAndMintHash = %tx_response.hash, "Will link deposit transaction hashes");
+
+        mapping_contract
+            .linkDepositHashes(source_tx_hash, tx_response.hash)
+            .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
+            .send()
+            .await?
+            .get_receipt()
+            .await?;
+
+        Ok(tx_response)
     }
 
     pub async fn handle_om_interop_sent(
         &self,
+        config: &Config,
+        relayer_nonce: RelayerNonce,
         OMInteropSent {
             nonce: sidechain_nonce,
             from,
             refundAmount: refund_amount,
             omToken: om_token,
             dstChainId: _dst_chain_id,
+            sourceHash: source_hash,
         }: OMInteropSent,
     ) -> Result<TransactionResponse, IncomingError> {
+        let provider = ProviderBuilder::new()
+            .wallet(config.relayer_private_key.clone())
+            .connect_http(config.side_chain_http_url.clone());
+        let mapping_contract = TxHashMapping::new(config.tx_mapping_contract_address, provider);
+
         let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
 
         let payload = PaymentPayload {
@@ -137,9 +179,27 @@ impl<'a> Relayer1MoneyContext<'a> {
             token: om_token,
         };
 
-        Ok(self
+        let tx_response = self
             .client
             .send_payment(payload, self.private_key())
-            .await?)
+            .await?;
+
+        debug!(burnAndBridgeHas = %source_hash, refundHash = %tx_response.hash, "Will link refund transaction hash");
+
+        mapping_contract
+            .linkRefundHashes(source_hash, tx_response.hash)
+            .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
+            .send()
+            .await
+            .map(Ok)
+            .or_else(|e| {
+                e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
+                    .map(Err)
+            })?
+            .map_err(IncomingError::MappingContractReverted)?
+            .get_receipt()
+            .await?;
+
+        Ok(tx_response)
     }
 }

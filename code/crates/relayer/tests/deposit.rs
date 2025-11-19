@@ -6,8 +6,7 @@ use alloy_primitives::U256;
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::Result;
-use onemoney_interop::contract::OMInterop;
-use onemoney_protocol::Client;
+use onemoney_interop::contract::{OMInterop, TxHashMapping};
 use relayer::config::Config;
 use relayer::outgoing::stream::relay_outgoing_events;
 use tracing::info;
@@ -18,8 +17,6 @@ use utils::spawn_relayer_and;
 use crate::utils::account::wait_for_eventual_balance;
 use crate::utils::setup::{e2e_test_context, E2ETestContext};
 use crate::utils::transaction::burn_and_bridge::burn_and_bridge;
-
-const ONE_MONEY_BASE_URL: &str = "http://127.0.0.1:18555";
 
 #[rstest::rstest]
 #[tokio::test]
@@ -32,14 +29,14 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
         relayer_wallet,
         sc_token_wallet,
         token_address,
-        contract_addr,
+        interop_contract_addr,
+        tx_mapping_contract_addr,
+        onemoney_client,
         ..
     } = e2e_test_context;
 
     let http_endpoint = anvil.endpoint_url();
     let ws_endpoint = anvil.ws_endpoint_url();
-
-    let onemoney_client = Client::custom(ONE_MONEY_BASE_URL.to_string())?;
 
     let sc_token_provider = ProviderBuilder::new()
         .wallet(sc_token_wallet.clone())
@@ -49,14 +46,17 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
         one_money_node_url: onemoney_client.base_url().clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: ws_endpoint.clone(),
-        interop_contract_address: contract_addr,
+        interop_contract_address: interop_contract_addr,
         relayer_private_key: relayer_wallet.clone(),
+        tx_mapping_contract_address: tx_mapping_contract_addr,
     };
 
     spawn_relayer_and(config, Duration::from_secs(1), || {
         let deposit_amount = U256::from(500u64);
         let recipient = anvil.addresses()[6];
-        let sc_token_contract = OMInterop::new(contract_addr, sc_token_provider.clone());
+        let sc_token_contract = OMInterop::new(interop_contract_addr, sc_token_provider.clone());
+        let mapping_contract =
+            TxHashMapping::new(tx_mapping_contract_addr, sc_token_provider.clone());
         async move {
             let initial_balance = fetch_balance(&onemoney_client, recipient, token_address).await?;
 
@@ -68,7 +68,7 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
                 "Invoking bridgeFrom on OMInterop contract"
             );
 
-            sc_token_contract
+            let tx_response = sc_token_contract
                 .bridgeFrom(recipient, deposit_amount)
                 .send()
                 .await?
@@ -90,6 +90,36 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
                 "1Money balance observed after bridgeFrom"
             );
 
+            info!("Verifying linked deposit transaction hashes");
+
+            let mint_and_bridge_hash = mapping_contract
+                .getDepositByBridgeFrom(tx_response.transaction_hash)
+                .call()
+                .await?;
+
+            let queried_mint_and_bridge = onemoney_client
+                .get_transaction_by_hash(&mint_and_bridge_hash.linked.to_string())
+                .await?;
+
+            assert!(matches!(
+                queried_mint_and_bridge.data,
+                onemoney_protocol::TxPayload::TokenBridgeAndMint { .. }
+            ));
+
+            let onemoney_protocol::TxPayload::TokenBridgeAndMint {
+                value,
+                recipient: mint_recipient,
+                token,
+                ..
+            } = queried_mint_and_bridge.data
+            else {
+                panic!("Expected TokenBridgeAndMint transaction");
+            };
+
+            assert_eq!(value.parse::<U256>()?, deposit_amount);
+            assert_eq!(mint_recipient, recipient);
+            assert_eq!(token, token_address);
+
             Ok(())
         }
     })
@@ -108,7 +138,8 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
         relayer_wallet,
         sc_token_wallet,
         token_address,
-        contract_addr,
+        interop_contract_addr,
+        tx_mapping_contract_addr,
         ..
     } = e2e_test_context;
 
@@ -128,8 +159,9 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
         one_money_node_url: onemoney_client.base_url().clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: anvil.ws_endpoint_url(),
-        interop_contract_address: contract_addr,
+        interop_contract_address: interop_contract_addr,
         relayer_private_key: relayer_wallet.clone(),
+        tx_mapping_contract_address: tx_mapping_contract_addr,
     };
 
     let relayer_nonce = config.sidechain_relayer_nonce().await?;
@@ -137,7 +169,7 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
     let relayer_provider = ProviderBuilder::new()
         .wallet(relayer_wallet.clone())
         .connect_http(http_endpoint.clone());
-    let relayer_contract = OMInterop::new(contract_addr, relayer_provider);
+    let relayer_contract = OMInterop::new(interop_contract_addr, relayer_provider);
 
     let sender_wallet: PrivateKeySigner = keys[6].clone().into();
     let sender = sender_wallet.address();
@@ -158,7 +190,7 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
     let withdrawal_amount = U256::from(400u64);
     let fee_amount = U256::from(1u64);
 
-    let sc_token_contract = OMInterop::new(contract_addr, sc_token_provider.clone());
+    let sc_token_contract = OMInterop::new(interop_contract_addr, sc_token_provider.clone());
 
     let initial_recipient_balance =
         fetch_balance(&onemoney_client, recipient, token_address).await?;

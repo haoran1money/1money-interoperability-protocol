@@ -2,7 +2,7 @@ use core::sync::atomic::Ordering;
 
 use alloy_primitives::Bytes;
 use alloy_provider::ProviderBuilder;
-use onemoney_interop::contract::OMInterop;
+use onemoney_interop::contract::{OMInterop, TxHashMapping};
 use onemoney_protocol::{Client, Transaction, TxPayload};
 use tracing::debug;
 
@@ -54,7 +54,9 @@ pub async fn process_burn_and_bridge_transactions(
         .wallet(config.relayer_private_key.clone())
         .connect_http(config.side_chain_http_url.clone());
 
-    let contract = OMInterop::new(config.interop_contract_address, provider);
+    let contract = OMInterop::new(config.interop_contract_address, provider.clone());
+
+    let mapping_contract = TxHashMapping::new(config.tx_mapping_contract_address, provider);
 
     let client = Client::custom(config.one_money_node_url.to_string())?;
 
@@ -72,6 +74,16 @@ pub async fn process_burn_and_bridge_transactions(
             "Expected TokenBurnAndBridge transaction".to_string(),
         ));
     };
+
+    debug!(burnAndBridgeHas = %tx.hash, "Will register withdrawal transaction hash");
+
+    mapping_contract
+        .registerWithdrawal(tx.hash)
+        .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
 
     let checkpoint_number = tx.checkpoint_number.ok_or(Error::MissingCheckpointNumber)?;
 
@@ -114,6 +126,7 @@ pub async fn process_burn_and_bridge_transactions(
             token,
             checkpoint_number,
             bridge_data,
+            tx.hash,
         )
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
@@ -128,6 +141,16 @@ pub async fn process_burn_and_bridge_transactions(
         .await?;
 
     debug!(?tx_receipt, "Tx receipt for bridge to");
+
+    debug!(burnAndBridgeHas = %tx.hash, bridgeToHash = %tx_receipt.transaction_hash, "Will link withdrawal transaction hash");
+
+    mapping_contract
+        .linkWithdrawalHashes(tx.hash, tx_receipt.transaction_hash)
+        .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
 
     Ok(())
 }

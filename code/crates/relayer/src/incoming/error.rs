@@ -16,6 +16,10 @@ pub enum Error {
     NonceMismatch { sidechain: u64, layer1: u64 },
     #[error(transparent)]
     Contract(#[from] alloy_contract::Error),
+    #[error("Pending transaction failed: {0}")]
+    PendingTransaction(#[from] alloy_provider::PendingTransactionError),
+    #[error("Contract reverted: {0:?}")]
+    MappingContractReverted(onemoney_interop::contract::TxHashMapping::TxHashMappingErrors),
     #[error(transparent)]
     RpcTransport(#[from] alloy_transport::RpcError<alloy_transport::TransportErrorKind>),
     #[error("Contract reverted: {0:?}")]

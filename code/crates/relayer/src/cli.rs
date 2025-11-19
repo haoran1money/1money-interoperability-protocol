@@ -122,7 +122,7 @@ impl Cli {
                     to = %config.one_money_node_url,
                     "Relaying SC events",
                 );
-                relay_incoming_events(&config, from_block).await?;
+                relay_incoming_events(&config, sidechain_relayer_nonce.clone(), from_block).await?;
             }
             Commands::Onemoney {
                 start_checkpoint,
@@ -184,7 +184,8 @@ impl Cli {
                 try_join3(
                     relay_poa_events(&config, sidechain_relayer_nonce.clone(), poa_poll_interval)
                         .map_err(CliError::from),
-                    relay_incoming_events(&config, from_block).map_err(CliError::from),
+                    relay_incoming_events(&config, sidechain_relayer_nonce.clone(), from_block)
+                        .map_err(CliError::from),
                     relay_outgoing_events(
                         &config,
                         sidechain_relayer_nonce,

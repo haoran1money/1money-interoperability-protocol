@@ -16,6 +16,17 @@ sol!(
 );
 
 sol!(
+    #[allow(clippy::too_many_arguments)]
+    #[sol(rpc, abi)]
+    #[derive(Debug)]
+    TxHashMapping,
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../solidity/out/TxHashMapping.sol/TxHashMapping.json"
+    )
+);
+
+sol!(
     #[sol(rpc, abi)]
     #[derive(Debug)]
     ERC1967Proxy,

@@ -165,7 +165,8 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         uint256 escrowFee,
         address omToken,
         uint64 checkpointId,
-        bytes calldata bridgeData
+        bytes calldata bridgeData,
+        bytes32 sourceHash
     ) external override onlyRelayer checkpointNotCompleted(checkpointId) {
         BridgeToRequest memory req = BridgeToRequest({
             from: from,
@@ -176,7 +177,8 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
             escrowFee: escrowFee,
             omToken: omToken,
             checkpointId: checkpointId,
-            bridgeData: bridgeData
+            bridgeData: bridgeData,
+            sourceHash: sourceHash
         });
 
         _bridgeTo(req);
@@ -192,7 +194,8 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         uint256 escrowFee,
         address omToken,
         uint64 checkpointId,
-        bytes calldata bridgeData
+        bytes calldata bridgeData,
+        bytes32 sourceHash
     ) public view override returns (uint256 bridgeFee, address feeToken) {
         BridgeToRequest memory req = BridgeToRequest({
             from: from,
@@ -203,7 +206,8 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
             escrowFee: escrowFee,
             omToken: omToken,
             checkpointId: checkpointId,
-            bridgeData: bridgeData
+            bridgeData: bridgeData,
+            sourceHash: sourceHash
         });
 
         _quoteBridgeToValidated(req);
@@ -409,7 +413,9 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
 
         _recordCheckpointProgress(req.checkpointId);
 
-        emit OMInteropSent(_latestInboundNonceInternal(), req.from, refundAmount, req.omToken, req.dstChainId);
+        emit OMInteropSent(
+            _latestInboundNonceInternal(), req.from, refundAmount, req.omToken, req.dstChainId, req.sourceHash
+        );
     }
 
     function _recordCheckpointProgress(uint64 checkpointId) internal {

@@ -1,7 +1,7 @@
 use core::time::Duration;
 
 use alloy_node_bindings::Anvil;
-use alloy_primitives::{Address, Bytes, U256};
+use alloy_primitives::{keccak256, Address, Bytes, U256};
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::PrivateKeySigner;
 use futures::StreamExt;
@@ -224,6 +224,7 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
             om_token,
             1,
             Bytes::new(),
+            keccak256("burnandbridgeTxHash"),
         )
         .send()
         .await?

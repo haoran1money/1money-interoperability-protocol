@@ -25,6 +25,8 @@ contract UpgradeTest is Test {
     address internal constant OM_TOKEN = address(0x03);
     address internal constant SC_TOKEN = address(0x04);
 
+    bytes32 internal constant BURN_AND_BRIDGE_HASH = keccak256("burnandbridgeTxHash");
+
     function setUp() public {
         // Deploy V1 implementation
         implV1 = new OMInterop();
@@ -61,7 +63,7 @@ contract UpgradeTest is Test {
         }
 
         vm.expectEmit(true, true, false, true, address(om));
-        emit IOMInterop.OMInteropSent(0, address(0x1), 2, OM_TOKEN, 1);
+        emit IOMInterop.OMInteropSent(0, address(0x1), 2, OM_TOKEN, 1, BURN_AND_BRIDGE_HASH);
 
         // Verify V1 logic: bridgeTo
         vm.startPrank(RELAYER);
@@ -75,7 +77,8 @@ contract UpgradeTest is Test {
             escrowFee: 2,
             omToken: OM_TOKEN,
             checkpointId: 3,
-            bridgeData: ""
+            bridgeData: "",
+            sourceHash: BURN_AND_BRIDGE_HASH
         });
 
         assertEq(om.getLatestInboundNonce(), 1);
@@ -94,7 +97,7 @@ contract UpgradeTest is Test {
         IUUPSUpgradeable(proxy).upgradeToAndCall(address(implV2), bytes(""));
 
         vm.expectEmit(true, true, false, true, address(om));
-        emit IOMInterop.OMInteropSent(1, address(0x1), 2, OM_TOKEN, 1);
+        emit IOMInterop.OMInteropSent(1, address(0x1), 2, OM_TOKEN, 1, BURN_AND_BRIDGE_HASH);
 
         // Verify V1 logic: bridgeTo
         vm.startPrank(RELAYER);
@@ -108,7 +111,8 @@ contract UpgradeTest is Test {
             escrowFee: 2,
             omToken: OM_TOKEN,
             checkpointId: 3,
-            bridgeData: ""
+            bridgeData: "",
+            sourceHash: BURN_AND_BRIDGE_HASH
         });
         assertEq(om.getLatestInboundNonce(), 2);
 

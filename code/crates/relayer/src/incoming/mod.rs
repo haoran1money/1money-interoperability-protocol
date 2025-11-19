@@ -4,7 +4,7 @@ use onemoney_interop::contract::OMInterop;
 use onemoney_protocol::client::http::Client;
 use tracing::{debug, info, warn};
 
-use crate::config::Config;
+use crate::config::{Config, RelayerNonce};
 
 pub mod error;
 mod handlers;
@@ -15,6 +15,7 @@ use handlers::Relayer1MoneyContext;
 
 pub async fn relay_incoming_events(
     config: &Config,
+    relayer_nonce: RelayerNonce,
     from_block: BlockNumber,
 ) -> Result<(), IncomingError> {
     let mut sc_event_stream = onemoney_interop::event::event_stream(
@@ -66,7 +67,7 @@ pub async fn relay_incoming_events(
 
                 if relayer_ctx.should_process_nonce(inner.nonce).await? {
                     let response = relayer_ctx
-                        .handle_om_interop_received(inner, tx_hash)
+                        .handle_om_interop_received(config, relayer_nonce.clone(), inner, tx_hash)
                         .await?;
 
                     info!(
@@ -102,7 +103,9 @@ pub async fn relay_incoming_events(
                 }
 
                 if relayer_ctx.should_process_nonce(inner.nonce).await? {
-                    let response = relayer_ctx.handle_om_interop_sent(inner).await?;
+                    let response = relayer_ctx
+                        .handle_om_interop_sent(config, relayer_nonce.clone(), inner)
+                        .await?;
 
                     info!(
                         ?block_number,

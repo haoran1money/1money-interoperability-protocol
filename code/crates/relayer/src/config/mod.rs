@@ -25,6 +25,9 @@ pub struct Config {
     /// Address of the interop contract
     #[arg(long, env = "INTEROP_CONTRACT_ADDRESS")]
     pub interop_contract_address: Address,
+    /// Address of the tx mapping contract
+    #[arg(long, env = "TX_MAPPING_CONTRACT_ADDRESS")]
+    pub tx_mapping_contract_address: Address,
     /// Private key of the relayer account
     #[arg(long, env = "RELAYER_PRIVATE_KEY")]
     pub relayer_private_key: PrivateKeySigner,

@@ -4,10 +4,12 @@ use core::time::Duration;
 
 use alloy_primitives::hex::ToHexExt;
 use alloy_primitives::U256;
-use alloy_provider::ProviderBuilder;
+use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
+use alloy_sol_types::SolEvent;
 use color_eyre::eyre::Result;
-use onemoney_interop::contract::OMInterop;
+use onemoney_interop::contract::OMInterop::OMInteropSent;
+use onemoney_interop::contract::{OMInterop, TxHashMapping};
 use onemoney_protocol::{Client, PaymentPayload};
 use relayer::config::Config;
 use tracing::info;
@@ -31,8 +33,9 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
         relayer_wallet,
         sc_token_wallet,
         token_address,
-        contract_addr,
+        interop_contract_addr,
         onemoney_client,
+        tx_mapping_contract_addr,
         ..
     } = e2e_test_context;
 
@@ -59,18 +62,23 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
         .mint_token(relayer_addr, U256::from(10000000), token_address)
         .await?;
 
+    let sc_token_provider = ProviderBuilder::new()
+        .wallet(sc_token_wallet.clone())
+        .connect_http(http_endpoint.clone());
+
     let config = Config {
         one_money_node_url: onemoney_client.base_url().clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: ws_endpoint.clone(),
-        interop_contract_address: contract_addr,
+        interop_contract_address: interop_contract_addr,
         relayer_private_key: relayer_wallet.clone(),
+        tx_mapping_contract_address: tx_mapping_contract_addr,
     };
 
     let relayer_provider = ProviderBuilder::new()
         .wallet(relayer_wallet.clone())
         .connect_http(http_endpoint.clone());
-    let relayer_contract = OMInterop::new(contract_addr, relayer_provider);
+    let relayer_contract = OMInterop::new(interop_contract_addr, relayer_provider.clone());
 
     spawn_relayer_and(config.clone(), Duration::from_secs(1), || {
         let transfer_amount_1 = U256::from(500u64);
@@ -81,6 +89,9 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
         let fee_amount = U256::from(1);
 
         let client_url = onemoney_client.base_url().to_string();
+
+        let mapping_contract =
+            TxHashMapping::new(tx_mapping_contract_addr, sc_token_provider.clone());
         async move {
             // First deposit
             let sender_balance_before_tx =
@@ -140,7 +151,7 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
             let balance_before_tx = fetch_balance(&onemoney_client, sender, token_address).await?;
             let bbnonce_before_tx = onemoney_client.get_account_bbonce(sender).await?;
 
-            burn_and_bridge(
+            let first_tx_response = burn_and_bridge(
                 client_url.clone(),
                 sender_wallet.clone(),
                 1,
@@ -327,6 +338,39 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
                 "1Money balance observed after first payment"
             );
 
+            info!("Verifying linked withdrawal transaction hashes");
+
+            let withdrawal_hashes = mapping_contract
+                .getWithdrawal(first_tx_response.hash)
+                .call()
+                .await?;
+
+            assert!(withdrawal_hashes.isSet);
+
+            // Find the transaction receipt linked to the bridgeTo hash
+            let bridge_to_transaction = relayer_provider
+                .get_transaction_receipt(withdrawal_hashes.bridgeTo)
+                .await?
+                .expect("Transaction receipt not found");
+
+            // Extract the OMInteropSent event from the transaction logs
+            let event = bridge_to_transaction
+                .logs()
+                .iter()
+                .find_map(|log| OMInteropSent::decode_raw_log(log.topics(), &log.data().data).ok())
+                .expect("OMInteropReceived not found in tx logs");
+
+            let OMInteropSent {
+                from,
+                refundAmount,
+                omToken,
+                ..
+            } = event;
+
+            assert_eq!(from, sender);
+            assert_eq!(refundAmount, fee_amount);
+            assert_eq!(omToken, token_address);
+
             Ok(())
         }
     })
@@ -344,7 +388,8 @@ async fn test_clear_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Re
         relayer_wallet,
         sc_token_wallet,
         token_address,
-        contract_addr,
+        interop_contract_addr,
+        tx_mapping_contract_addr,
         ..
     } = e2e_test_context;
 
@@ -375,14 +420,15 @@ async fn test_clear_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Re
         one_money_node_url: onemoney_client.base_url().clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: anvil.ws_endpoint_url(),
-        interop_contract_address: contract_addr,
+        interop_contract_address: interop_contract_addr,
         relayer_private_key: relayer_wallet.clone(),
+        tx_mapping_contract_address: tx_mapping_contract_addr,
     };
 
     let relayer_provider = ProviderBuilder::new()
         .wallet(relayer_wallet.clone())
         .connect_http(http_endpoint.clone());
-    let relayer_contract = OMInterop::new(contract_addr, relayer_provider);
+    let relayer_contract = OMInterop::new(interop_contract_addr, relayer_provider);
 
     let transfer_amount = U256::from(500u64);
     let withdrawal_amount = U256::from(10);

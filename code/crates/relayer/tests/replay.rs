@@ -33,7 +33,7 @@ async fn cross_chain_replay_flow_is_enforced(
         sc_token_wallet,
         user_wallet,
         token_address,
-        contract_addr,
+        interop_contract_addr,
         ..
     } = e2e_test_context;
 
@@ -63,7 +63,7 @@ async fn cross_chain_replay_flow_is_enforced(
     let sc_token_provider = ProviderBuilder::new()
         .wallet(sc_token_wallet.clone())
         .connect_http(eth_endpoint.clone());
-    let source_tx_hash = OMInterop::new(contract_addr, sc_token_provider)
+    let source_tx_hash = OMInterop::new(interop_contract_addr, sc_token_provider)
         .bridgeFrom(user_address, net_bridge_amount)
         .send()
         .await?
@@ -74,7 +74,7 @@ async fn cross_chain_replay_flow_is_enforced(
     let relayer_provider = ProviderBuilder::new()
         .wallet(relayer_wallet.clone())
         .connect_http(eth_endpoint.clone());
-    let relayer_contract = OMInterop::new(contract_addr, relayer_provider);
+    let relayer_contract = OMInterop::new(interop_contract_addr, relayer_provider);
 
     info!("Step 1: begin bridge_and_mint replay validation");
     // --- Step 1: bridge_and_mint replay ------------------------------------------------------------------------------
@@ -219,6 +219,7 @@ async fn cross_chain_replay_flow_is_enforced(
             token_address,
             checkpoint_id,
             Bytes::new(),
+            first_burn.hash,
         )
         .send()
         .await?
@@ -236,6 +237,7 @@ async fn cross_chain_replay_flow_is_enforced(
             token_address,
             checkpoint_id,
             Bytes::new(),
+            first_burn.hash,
         )
         .send()
         .await;

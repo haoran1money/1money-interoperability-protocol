@@ -11,6 +11,7 @@ struct BridgeToRequest {
     address omToken;
     uint64 checkpointId;
     bytes bridgeData;
+    bytes32 sourceHash;
 }
 
 enum InteropProtocol {
@@ -28,7 +29,12 @@ interface IOMInterop {
 
     /// @notice Emitted when an outgoing bridge transfer is dispatched to an external chain.
     event OMInteropSent(
-        uint64 nonce, address indexed from, uint256 refundAmount, address indexed omToken, uint32 dstChainId
+        uint64 nonce,
+        address indexed from,
+        uint256 refundAmount,
+        address indexed omToken,
+        uint32 dstChainId,
+        bytes32 sourceHash
     );
 
     /// @notice Records an incoming cross-chain transfer emitted by the token bridge.
@@ -55,7 +61,8 @@ interface IOMInterop {
         uint256 escrowFee,
         address omToken,
         uint64 checkpointId,
-        bytes calldata bridgeData
+        bytes calldata bridgeData,
+        bytes32 sourceHash
     ) external;
 
     /// @notice Quotes the bridge fee for a potential `bridgeTo` request without changing state.
@@ -79,7 +86,8 @@ interface IOMInterop {
         uint256 escrowFee,
         address omToken,
         uint64 checkpointId,
-        bytes calldata bridgeData
+        bytes calldata bridgeData,
+        bytes32 sourceHash
     ) external view returns (uint256 bridgeFee, address feeToken);
 
     /// @notice Updates the contract with the number of certified BurnAndBridge instructions in a checkpoint.

@@ -54,20 +54,23 @@ where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Result<()>>,
 {
+    let relayer_nonce = config.sidechain_relayer_nonce().await?;
+
     let mut relayer_incoming_task = tokio::spawn({
         let config = config.clone();
+        let relayer_nonce = relayer_nonce.clone();
         async move {
             let from_block = get_latest_incomplete_block_number(&config).await?;
             info!(from_block = %from_block, "Will start incoming relayer task");
-            let relayer_result = relay_incoming_events(&config, from_block).await;
+            let relayer_result =
+                relay_incoming_events(&config, relayer_nonce.clone(), from_block).await;
             if let Err(err) = &relayer_result {
                 warn!(%err, "relayer side-chain event loop ended");
             }
             relayer_result
         }
     });
-
-    let relayer_nonce = config.sidechain_relayer_nonce().await?;
+    let relayer_nonce = relayer_nonce.clone();
 
     let mut relayer_outgoing_task = tokio::spawn({
         let config = config.clone();

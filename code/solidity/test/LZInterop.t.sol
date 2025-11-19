@@ -49,6 +49,8 @@ contract LZInteropTest is TestHelperOz5 {
     address internal constant RELAYER = address(0xC0FFEE);
     address internal constant OM_TOKEN = address(0xBEEF);
 
+    bytes32 internal constant BURN_AND_BRIDGE_HASH = keccak256("burnandbridgeTxHash");
+
     OMInterop internal interop;
     OMOFT internal localOft;
     PlainOFT internal remoteOft;
@@ -195,12 +197,32 @@ contract LZInteropTest is TestHelperOz5 {
         // Invalid bridgeData should revert with custom error before fee checks.
         vm.expectRevert(LZInterop.InvalidBridgeData.selector);
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0xAA), 0, remoteRecipient, amountToSend, REMOTE_EID, 0, OM_TOKEN, checkpointId, "");
+        interop.bridgeTo(
+            address(0xAA),
+            0,
+            remoteRecipient,
+            amountToSend,
+            REMOTE_EID,
+            0,
+            OM_TOKEN,
+            checkpointId,
+            "",
+            BURN_AND_BRIDGE_HASH
+        );
 
         assertEq(remoteOft.balanceOf(remoteRecipient), 0, "remote recipient should start with zero balance");
 
         (uint256 bridgeFee, address feeToken) = interop.quoteBridgeTo(
-            address(0xAA), 0, remoteRecipient, amountToSend, REMOTE_EID, 0, OM_TOKEN, checkpointId, bridgeData
+            address(0xAA),
+            0,
+            remoteRecipient,
+            amountToSend,
+            REMOTE_EID,
+            0,
+            OM_TOKEN,
+            checkpointId,
+            bridgeData,
+            BURN_AND_BRIDGE_HASH
         );
         assertEq(feeToken, address(lzToken), "bridge fee token should be ZRO");
         assertGt(bridgeFee, 0, "bridge fee should use ZRO tokens");
@@ -221,7 +243,8 @@ contract LZInteropTest is TestHelperOz5 {
             bridgeFee * 2,
             OM_TOKEN,
             checkpointId,
-            bridgeData
+            bridgeData,
+            BURN_AND_BRIDGE_HASH
         );
         uint256 relayerLzAfter = lzToken.balanceOf(RELAYER);
         assertEq(relayerLzBefore - relayerLzAfter, MOCK_LZ_TOKEN_FEE, "relayer should fund LZ fee");
@@ -230,7 +253,7 @@ contract LZInteropTest is TestHelperOz5 {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         require(logs.length > 6, "expected OMInteropSent log");
         Vm.Log memory entry = logs[6]; // seventh log is OMInteropSent
-        bytes32 sentSig = keccak256("OMInteropSent(uint64,address,uint256,address,uint32)");
+        bytes32 sentSig = keccak256("OMInteropSent(uint64,address,uint256,address,uint32,bytes32)");
         assertEq(entry.emitter, address(interop), "OMInteropSent emitter mismatch");
         assertEq(entry.topics.length, 3, "OMInteropSent topics length mismatch");
         assertEq(entry.topics[0], sentSig, "log 6 should be OMInteropSent");

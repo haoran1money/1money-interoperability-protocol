@@ -6,7 +6,7 @@ use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer_local::PrivateKeySigner;
 use color_eyre::eyre::Result;
-use onemoney_interop::contract::{deploy_uups_like, OMInterop};
+use onemoney_interop::contract::{deploy_uups_like, OMInterop, TxHashMapping};
 use onemoney_protocol::{Authority, Client as OnemoneyClient};
 use rstest::fixture;
 
@@ -23,7 +23,8 @@ pub struct E2ETestContext {
     pub sc_token_wallet: PrivateKeySigner,
     pub user_wallet: PrivateKeySigner,
     pub token_address: Address,
-    pub contract_addr: Address,
+    pub interop_contract_addr: Address,
+    pub tx_mapping_contract_addr: Address,
 }
 
 #[fixture]
@@ -89,8 +90,13 @@ async fn setup_e2e_test_context() -> Result<E2ETestContext> {
     .await?
     .1;
 
-    let contract_addr = *contract.address();
-    let operator_contract = OMInterop::new(contract_addr, operator_provider);
+    let interop_contract_addr = *contract.address();
+
+    let tx_mapping_contract =
+        TxHashMapping::deploy(owner_provider, owner_wallet.address(), relayer_address).await?;
+    let tx_mapping_contract_addr = *tx_mapping_contract.address();
+
+    let operator_contract = OMInterop::new(interop_contract_addr, operator_provider);
 
     operator_contract
         .mapTokenAddresses(token_address, sc_token_wallet.address(), 1)
@@ -120,6 +126,7 @@ async fn setup_e2e_test_context() -> Result<E2ETestContext> {
         sc_token_wallet,
         user_wallet,
         token_address,
-        contract_addr,
+        interop_contract_addr,
+        tx_mapping_contract_addr,
     })
 }

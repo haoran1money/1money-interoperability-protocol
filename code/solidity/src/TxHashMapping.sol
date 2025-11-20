@@ -190,7 +190,6 @@ contract TxHashMapping is Ownable {
     {
         WithdrawalEntry storage entry = _withdrawalMapping[burnAndBridgeTxHash];
         if (!entry.exists) revert UnsetHash();
-        if (entry.bridgeToTxHash == bytes32(0)) revert IncompleteWithdrawal();
         if (entry.refundTxHash != bytes32(0)) revert AlreadyLinked();
 
         entry.refundTxHash = refundTxHash;

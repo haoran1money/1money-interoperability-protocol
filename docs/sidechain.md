@@ -44,7 +44,7 @@ emits per-node configs in `.testnet/config/`.
 ## Generate node configs
 
 ```bash
-cargo run --bin malachitebft-eth-app -- testnet \
+cargo run --bin emerald -- testnet \
   --home nodes \
   --testnet-config .testnet/testnet_config.toml
 ```
@@ -55,15 +55,17 @@ Node directories and validator keys land in `./nodes/{0,1,2,3}/`.
 
 ```bash
 ls nodes/*/config/priv_validator_key.json | \
-  xargs -I{} cargo run --bin malachitebft-eth-app show-pubkey {} \
+  xargs -I{} cargo run --bin emerald show-pubkey {} \
   > nodes/validator_public_keys.txt
 ```
 
 ## Create the genesis file
 
 ```bash
-cargo run --bin malachitebft-eth-utils genesis \
-  --public-keys-file ./nodes/validator_public_keys.txt
+cargo run --bin emerald-utils genesis \
+  --public-keys-file ./nodes/validator_public_keys.txt \
+  --poa-owner-address "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" \
+  --devnet
 ```
 
 `./assets/genesis.json` is produced for Reth.

@@ -90,6 +90,7 @@ pub async fn relay_incoming_events(
                     refund = %inner.refundAmount,
                     om_token = ?inner.omToken,
                     dst_chain_id = inner.dstChainId,
+                    source_hash = ?inner.sourceHash,
                     "Handling OMInteropSent event"
                 );
 

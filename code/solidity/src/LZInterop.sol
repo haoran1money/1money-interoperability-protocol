@@ -5,11 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IOFT, SendParam} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
 import {OptionsBuilder} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
-import {
-    ILayerZeroEndpointV2,
-    MessagingFee
-} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
-import {IOAppCore} from "@layerzerolabs/oapp-evm/contracts/oapp/interfaces/IOAppCore.sol";
+import {MessagingFee} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 import {BridgeToRequest} from "./IOMInterop.sol";
 
 /**
@@ -21,32 +17,24 @@ abstract contract LZInterop {
 
     error InvalidBridgeData();
 
-    function _quoteLayerZero(address oftToken, BridgeToRequest memory req)
-        internal
-        view
-        returns (uint256 bridgeFee, address feeToken)
-    {
+    function _quoteLayerZero(address oftToken, BridgeToRequest memory req) internal view returns (uint256 bridgeFee) {
         SendParam memory sendParam = _buildLayerZeroSendParam(req);
-        MessagingFee memory fee = IOFT(oftToken).quoteSend(sendParam, true);
-        feeToken = IOAppCore(oftToken).endpoint().lzToken();
-        bridgeFee = fee.lzTokenFee;
+        // Set `_payInLzToken` to false to get native fee
+        MessagingFee memory fee = IOFT(oftToken).quoteSend(sendParam, false);
+        bridgeFee = fee.nativeFee;
     }
 
-    function _bridgeWithLayerZero(address oftToken, BridgeToRequest memory req) internal {
+    function _bridgeWithLayerZero(address oftToken, BridgeToRequest memory req) internal returns (uint256) {
         SendParam memory sendParam = _buildLayerZeroSendParam(req);
-        MessagingFee memory fee = IOFT(oftToken).quoteSend(sendParam, true);
+
+        // Set `_payInLzToken` to false to get native fee
+        MessagingFee memory fee = IOFT(oftToken).quoteSend(sendParam, false);
+        uint256 nativeFee = fee.nativeFee;
+
         address relayer = msg.sender;
-        _collectLzFeeFromRelayer(oftToken, fee.lzTokenFee, relayer);
-        IOFT(oftToken).send(sendParam, fee, relayer);
-    }
 
-    function _collectLzFeeFromRelayer(address oftToken, uint256 lzTokenFee, address relayer) internal {
-        if (lzTokenFee == 0) return;
-        ILayerZeroEndpointV2 endpoint = IOAppCore(oftToken).endpoint();
-        address lzToken = endpoint.lzToken();
-        IERC20 token = IERC20(lzToken);
-        token.safeTransferFrom(relayer, address(this), lzTokenFee);
-        token.forceApprove(oftToken, lzTokenFee);
+        IOFT(oftToken).send{value: nativeFee}(sendParam, fee, relayer);
+        return nativeFee;
     }
 
     function _buildLayerZeroSendParam(BridgeToRequest memory req) internal view returns (SendParam memory sendParam) {

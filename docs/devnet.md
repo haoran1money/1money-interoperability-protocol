@@ -90,9 +90,23 @@ mkdir -p $OM_ACCOUNTS_DIR
 cd code
 forge build
 cd ..
-OMINTEROP_IMPL_BYTECODE=$(jq -r '.bytecode.object' code/solidity/out/OMInterop.sol/OMInterop.json)
+
+# Deploy PriceOracle contract
+PRICEORACLE_BYTECODE=$(jq -r '.bytecode.object' code/solidity/out/PriceOracle.sol/PriceOracle.json)
+
+PRICEORACLE_DEPLOY_OUTPUT=$(cast send \
+  --json \
+  --rpc-url $SIDECHAIN_RPC \
+  --private-key $OWNER_PRIVATE_KEY \
+  --create $PRICEORACLE_BYTECODE "constructor(address,address)" $OWNER_ADDRESS $OPERATOR_ADDRESS)
+# extract deployed contract address
+PRICEORACLE_CONTRACT_ADDRESS=$(echo $PRICEORACLE_DEPLOY_OUTPUT | jq -r '.contractAddress')
+
+echo PRICEORACLE_CONTRACT_ADDRESS=$PRICEORACLE_CONTRACT_ADDRESS
 
 # deploy OMInterop contract
+OMINTEROP_IMPL_BYTECODE=$(jq -r '.bytecode.object' code/solidity/out/OMInterop.sol/OMInterop.json)
+
 IMPL_DEPLOY_OUTPUT=$(cast send \
   --json \
   --rpc-url "$SIDECHAIN_RPC" \
@@ -101,12 +115,6 @@ IMPL_DEPLOY_OUTPUT=$(cast send \
 
 # extract deployed contract address
 OMINTEROP_IMPL_ADDRESS=$(echo "$IMPL_DEPLOY_OUTPUT" | jq -r '.contractAddress')
-
-INIT_DATA=$(cast abi-encode \
-  "initialize(address,address,address)" \
-  "$OWNER_ADDRESS" \
-  "$OPERATOR_ADDRESS" \
-  "$RELAYER_ADDRESS")
 
 ERC1967PROXY_BYTECODE=$(jq -r '.bytecode.object' code/solidity/out/ERC1967Proxy.sol/ERC1967Proxy.json)
 
@@ -120,20 +128,22 @@ PROXY_DEPLOY_OUTPUT=$(cast send \
   "$OMINTEROP_IMPL_ADDRESS" \
   "0x")
 
+INTEROP_CONTRACT_ADDRESS=$(echo "$PROXY_DEPLOY_OUTPUT" | jq -r '.contractAddress')
+
 cast send \
   --rpc-url "$SIDECHAIN_RPC" \
   --private-key "$OWNER_PRIVATE_KEY" \
   "$INTEROP_CONTRACT_ADDRESS" \
-  "initialize(address,address,address)" \
+  "initialize(address,address,address,address)" \
   "$OWNER_ADDRESS" \
   "$OPERATOR_ADDRESS" \
-  "$RELAYER_ADDRESS"
+  "$RELAYER_ADDRESS" \
+  "$PRICEORACLE_CONTRACT_ADDRESS"
 
-INTEROP_CONTRACT_ADDRESS=$(echo "$PROXY_DEPLOY_OUTPUT" | jq -r '.contractAddress')
 
 # Deploy TxHashMapping contract
 TXHASHMAPPING_BYTECODE=$(jq -r '.bytecode.object' code/solidity/out/TxHashMapping.sol/TxHashMapping.json)
-# deploy OMInterop contract
+
 TXHASHMAPPING_DEPLOY_OUTPUT=$(cast send --json --rpc-url $SIDECHAIN_RPC --private-key $OWNER_PRIVATE_KEY --create $TXHASHMAPPING_BYTECODE "constructor(address,address)" $OWNER_ADDRESS $RELAYER_ADDRESS)
 # extract deployed contract address
 TXHASHMAPPING_CONTRACT_ADDRESS=$(echo $TXHASHMAPPING_DEPLOY_OUTPUT | jq -r '.contractAddress')
@@ -189,7 +199,7 @@ cargo run --bin relayer -- --relayer-private-key $RELAYER_PRIVATE_KEY --interop-
 # pre-deposit user balance
 1m account balance $OM_TOKEN $USER_ADDRESS --profile $PROFILE --url $ONEMONEY_RPC --workdir $OM_ACCOUNTS_DIR
 # perform deposit from sidechain; ideally this is called by LayerZero OFT contract
-cast send $INTEROP_CONTRACT_ADDRESS "bridgeFrom(address,uint256)" $USER_ADDRESS 80500000000000000000 --rpc-url $SIDECHAIN_RPC --private-key $SC_TOKEN_PRIVATE_KEY
+cast send $INTEROP_CONTRACT_ADDRESS "bridgeFrom(address,uint256)" $USER_ADDRESS 100000000000000000000 --rpc-url $SIDECHAIN_RPC --private-key $SC_TOKEN_PRIVATE_KEY
 # check the user balance after deposit; it should be 755
 ```
 ### Withdrawal from Onemoney to Sidechain

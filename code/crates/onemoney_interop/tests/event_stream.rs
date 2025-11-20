@@ -131,6 +131,14 @@ async fn event_stream_captures_ominterop_events() -> color_eyre::Result<()> {
         .await?;
     debug!("setRateLimit transaction confirmed");
 
+    let update_price_oracle_contract = next_event(&mut stream).await;
+    match update_price_oracle_contract {
+        OMInterop::OMInteropEvents::PriceOracleUpdated(event) => {
+            info!(?event, "price oracle update event");
+        }
+        e => panic!("unexpected price oracle update event variant: {e:?}"),
+    }
+
     let initialized_contract = next_event(&mut stream).await;
     match initialized_contract {
         OMInterop::OMInteropEvents::Initialized(event) => {

@@ -76,7 +76,6 @@ interface IOMInterop {
     /// @param checkpointId Checkpoint that certified the originating BurnAndBridge.
     /// @param bridgeData Protocol-specific bytes to tune the bridge call (e.g. gas limits or slippage).
     /// @return bridgeFee Estimated fee charged by the bridge.
-    /// @return feeToken Address of the token the bridge expects for the fee.
     function quoteBridgeTo(
         address from,
         uint64 bbNonce,
@@ -88,7 +87,7 @@ interface IOMInterop {
         uint64 checkpointId,
         bytes calldata bridgeData,
         bytes32 sourceHash
-    ) external view returns (uint256 bridgeFee, address feeToken);
+    ) external view returns (uint256 bridgeFee);
 
     /// @notice Updates the contract with the number of certified BurnAndBridge instructions in a checkpoint.
     /// @param checkpointId Identifier of the payment-network checkpoint.

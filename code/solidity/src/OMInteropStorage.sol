@@ -23,6 +23,8 @@ library OMInteropStorage {
         mapping(uint64 => OMInteropTypes.CheckpointTally) checkpointTallies;
         mapping(address => OMInteropTypes.RateLimitParam) rateLimitsParam;
         mapping(address => OMInteropTypes.RateLimitData) rateLimitsData;
+        // Price oracle address
+        address priceOracle;
     }
 
     function layout() internal pure returns (Layout storage l) {

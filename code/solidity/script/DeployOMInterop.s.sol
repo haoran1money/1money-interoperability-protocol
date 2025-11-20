@@ -12,10 +12,11 @@ contract DeployOMInteropScript is Script {
         address owner = msg.sender;
         address operator = msg.sender;
         address relayer = msg.sender;
+        address priceOracle = vm.envAddress("PRICE_ORACLE");
 
         OMInterop impl = new OMInterop();
 
-        bytes memory initData = abi.encodeCall(OMInterop.initialize, (owner, operator, relayer));
+        bytes memory initData = abi.encodeCall(OMInterop.initialize, (owner, operator, relayer, priceOracle));
 
         new ERC1967Proxy(address(impl), initData);
 

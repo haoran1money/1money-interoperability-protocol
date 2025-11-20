@@ -3,7 +3,9 @@ pragma solidity ^0.8.22;
 
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IOMInterop, InteropProtocol, BridgeToRequest} from "./IOMInterop.sol";
+import {IPriceOracle} from "./IPriceOracle.sol";
 import {LZInterop} from "./LZInterop.sol";
 import {OMInteropTypes} from "./OMInteropTypes.sol";
 import {OMInteropStorage} from "./OMInteropStorage.sol";
@@ -13,6 +15,11 @@ import {OMInteropStorage} from "./OMInteropStorage.sol";
  * @notice The interoperability contract described in ADR-001 with Ownable access control.
  */
 contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop {
+    IPriceOracle public priceOracle;
+
+    // Allow the contract to receive native tokens for LayerZero fees
+    receive() external payable {}
+
     error Unauthorized();
     error InvalidAddress();
     error InvalidAmount();
@@ -38,6 +45,9 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
     /// @notice Emitted when the relayer address changes.
     event RelayerUpdated(address indexed newRelayer);
 
+    /// @notice Emitted when the Price Oracle address changes.
+    event PriceOracleUpdated(address indexed newPriceOracle);
+
     /// @notice Emitted when the rate limit changed for a token.
     event RateLimitsChanged(address token, uint256 limit, uint256 window);
 
@@ -50,12 +60,13 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
     /// @param owner_ Address that will own the contract.
     /// @param operator_ Address allowed to execute operator-restricted actions.
     /// @param relayer_ Address allowed to dispatch bridge transactions.
-    function initialize(address owner_, address operator_, address relayer_)
+    function initialize(address owner_, address operator_, address relayer_, address priceOracle_)
         external
         initializer
         nonZeroAddress(owner_)
         nonZeroAddress(operator_)
         nonZeroAddress(relayer_)
+        nonZeroAddress(priceOracle_)
     {
         __Ownable_init(owner_);
 
@@ -63,9 +74,11 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
 
         s.operator = operator_;
         s.relayer = relayer_;
+        s.priceOracle = priceOracle_;
 
         emit OperatorUpdated(operator_);
         emit RelayerUpdated(relayer_);
+        emit PriceOracleUpdated(priceOracle_);
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
@@ -138,6 +151,22 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         emit RelayerUpdated(newRelayer);
     }
 
+    /// @notice Updates the Price Oracle address. Only callable by the owner.
+    /// @param newPriceOracle Address of the new Price Oracle.
+    function setPriceOracle(address newPriceOracle) external onlyOwner nonZeroAddress(newPriceOracle) {
+        // Basic contract check
+        require(newPriceOracle.code.length > 0, "Not a contract");
+
+        // ERC-165 interface check
+        require(
+            IERC165(newPriceOracle).supportsInterface(type(IPriceOracle).interfaceId), "Does not implement IPriceOracle"
+        );
+
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        s.priceOracle = newPriceOracle;
+        emit PriceOracleUpdated(newPriceOracle);
+    }
+
     /// @inheritdoc IOMInterop
     function bridgeFrom(address to, uint256 amount)
         external
@@ -196,7 +225,7 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         uint64 checkpointId,
         bytes calldata bridgeData,
         bytes32 sourceHash
-    ) public view override returns (uint256 bridgeFee, address feeToken) {
+    ) public view override returns (uint256 bridgeFee) {
         BridgeToRequest memory req = BridgeToRequest({
             from: from,
             bbNonce: bbNonce,
@@ -211,7 +240,7 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         });
 
         _quoteBridgeToValidated(req);
-        (bridgeFee, feeToken) = _quoteBridgeTo(req);
+        bridgeFee = _quoteBridgeTo(req);
     }
 
     /// @inheritdoc IOMInterop
@@ -369,22 +398,25 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         }
     }
 
-    function _quoteBridgeTo(BridgeToRequest memory req) internal view returns (uint256 bridgeFee, address feeToken) {
+    function _quoteBridgeTo(BridgeToRequest memory req) internal view returns (uint256 bridgeFee) {
         OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         OMInteropTypes.TokenBinding storage binding = s.tokensByOm[req.omToken];
-        (bridgeFee, feeToken) = _quoteBridgeTo(binding, req);
+        bridgeFee = _quoteBridgeTo(binding, req);
     }
 
     function _quoteBridgeTo(OMInteropTypes.TokenBinding storage binding, BridgeToRequest memory req)
         internal
         view
-        returns (uint256 bridgeFee, address feeToken)
+        returns (uint256 bridgeFee)
     {
         InteropProtocol protoId = binding.interopProtoId;
         if (protoId == InteropProtocol.LayerZero) {
-            (bridgeFee, feeToken) = _quoteLayerZero(binding.scToken, req);
+            uint256 rawFee;
+            rawFee = _quoteLayerZero(binding.scToken, req);
+            // Compute L1 token fee based on price oracle
+            bridgeFee = _computeFee(binding.omToken, rawFee);
         } else if (protoId == InteropProtocol.Mock) {
-            (bridgeFee, feeToken) = (0, address(0));
+            bridgeFee = 0;
         } else {
             revert UnknownInteropProto(protoId);
         }
@@ -474,9 +506,9 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
     {
         InteropProtocol protoId = binding.interopProtoId;
         if (protoId == InteropProtocol.LayerZero) {
-            _bridgeWithLayerZero(binding.scToken, req);
-            // TODO: implement logic for refunds once the LayerZero refund mechanics are finalized.
-            refundAmount = 0;
+            uint256 rawFee = _bridgeWithLayerZero(binding.scToken, req);
+            uint256 paidFee = _computeFee(binding.omToken, rawFee);
+            refundAmount = req.escrowFee >= paidFee ? req.escrowFee - paidFee : 0;
         } else if (protoId == InteropProtocol.Mock) {
             refundAmount = req.escrowFee;
         } else {
@@ -529,5 +561,12 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         }
 
         rlData.amountInFlight += _amount;
+    }
+
+    function _computeFee(address token, uint256 paidFee) internal view returns (uint256 refundAmount) {
+        // Compute refund based on price oracle
+        OMInteropStorage.Layout storage s = OMInteropStorage.layout();
+        address oracleAddr = s.priceOracle;
+        (refundAmount,) = IPriceOracle(oracleAddr).convertNativeTokenToToken(token, paidFee);
     }
 }

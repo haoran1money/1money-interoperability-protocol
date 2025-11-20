@@ -2,13 +2,15 @@
 pragma solidity ^0.8.22;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {IPriceOracle} from "./IPriceOracle.sol";
 
 /**
  * @title PriceOracle
  * @notice Stores and provides the value of 1e18 native gas token expressed in supported tokens.
  */
-contract PriceOracle is Ownable, IPriceOracle {
+contract PriceOracle is Ownable, ERC165, IPriceOracle {
     // ---------- Constants ----------
     uint256 constant PRICE_DECIMALS = 1e18;
 
@@ -34,6 +36,17 @@ contract PriceOracle is Ownable, IPriceOracle {
     modifier nonZeroAddress(address account) {
         if (account == address(0)) revert InvalidAddress();
         _;
+    }
+
+    // ---------- ERC-165 ----------
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(ERC165, IERC165) // now ERC165 *is* a parent
+        returns (bool)
+    {
+        return interfaceId == type(IPriceOracle).interfaceId || super.supportsInterface(interfaceId);
     }
 
     // ---------- Storage ----------

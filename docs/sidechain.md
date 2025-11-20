@@ -19,6 +19,8 @@ You should see four keys like:
 
 ## Clone emerald
 
+This setup works for commit `1eb7a29fe37d93e8cc8e5d573f06a2d9ea3ea05c`
+
 ```bash
 git clone git@github.com:informalsystems/emerald
 cd emerald

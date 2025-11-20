@@ -36,32 +36,49 @@ sol!(
     )
 );
 
+sol!(
+    #[allow(clippy::too_many_arguments)]
+    #[sol(rpc, abi)]
+    #[derive(Debug)]
+    PriceOracle,
+    concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../solidity/out/PriceOracle.sol/PriceOracle.json"
+    )
+);
+
 pub async fn deploy_uups_like<P: Provider>(
     provider: &P,
     owner: Address,
     operator: Address,
     relayer: Address,
 ) -> Result<(Address, OMInterop::OMInteropInstance<&P>), Error> {
-    // 1) Deploy the implementation (no constructor args)
+    // 1) Deploy the price oracle
+    let price_oracle_contract = PriceOracle::deploy(provider, owner, operator)
+        .await
+        .unwrap();
+
+    // 2) Deploy the implementation (no constructor args)
     let impl_instance = OMInterop::deploy(provider).await.unwrap();
     let impl_addr = *impl_instance.address();
 
-    // 2) Encode initializer calldata
+    // 3) Encode initializer calldata
     let init = OMInterop::initializeCall {
         owner_: owner,
         operator_: operator,
         relayer_: relayer,
+        priceOracle_: *price_oracle_contract.address(),
     };
     let init_data: Bytes = init.abi_encode().into();
 
-    // 3) Deploy ERC1967Proxy (constructor(address _logic, bytes _data))
+    // 4) Deploy ERC1967Proxy (constructor(address _logic, bytes _data))
     //    NOTE: pass constructor args as a single tuple
     let proxy_instance = ERC1967Proxy::deploy(provider, impl_addr, init_data)
         .await
         .unwrap();
     let proxy_addr = *proxy_instance.address();
 
-    // 4) Bind the implementation ABI at the proxy address
+    // 5) Bind the implementation ABI at the proxy address
     let om = OMInterop::new(proxy_addr, provider);
 
     Ok((proxy_addr, om))

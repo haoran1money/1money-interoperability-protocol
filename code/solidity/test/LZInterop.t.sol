@@ -3,6 +3,7 @@ pragma solidity ^0.8.22;
 
 import {OMInterop} from "../src/OMInterop.sol";
 import {LZInterop} from "../src/LZInterop.sol";
+import {PriceOracle} from "../src/PriceOracle.sol";
 import {IOMInterop, InteropProtocol} from "../src/IOMInterop.sol";
 import {OMOFT} from "../src/OMOFT.sol";
 import {OFT} from "@layerzerolabs/oft-evm/contracts/OFT.sol";
@@ -42,7 +43,7 @@ contract LZInteropTest is TestHelperOz5 {
     uint32 private constant LOCAL_EID = 1;
     uint32 private constant REMOTE_EID = 2;
     uint256 private constant BRIDGE_AMOUNT = 1e18;
-    uint256 private constant MOCK_LZ_TOKEN_FEE = 5e15;
+    uint256 private constant MOCK_NATIVE_TOKEN_FEE = 5e15;
 
     address internal constant OWNER = address(0xA11CE);
     address internal constant OPERATOR = address(0xB0B);
@@ -67,18 +68,23 @@ contract LZInteropTest is TestHelperOz5 {
 
         for (uint256 i = 0; i < endpointSetup.endpointList.length; i++) {
             endpointSetup.endpointList[i].setLzToken(address(lzToken));
-            SimpleMessageLibMock(payable(endpointSetup.sendLibs[i])).setMessagingFee(0, MOCK_LZ_TOKEN_FEE);
+            SimpleMessageLibMock(payable(endpointSetup.sendLibs[i])).setMessagingFee(MOCK_NATIVE_TOKEN_FEE, 0);
         }
+
+        PriceOracle oracle = new PriceOracle(OWNER, OPERATOR);
+
+        vm.prank(OPERATOR);
+        oracle.updatePrice(OM_TOKEN, 1e18);
 
         OMInterop impl = new OMInterop();
 
-        bytes memory initData = abi.encodeCall(OMInterop.initialize, (OWNER, OPERATOR, RELAYER));
+        bytes memory initData = abi.encodeCall(OMInterop.initialize, (OWNER, OPERATOR, RELAYER, address(oracle)));
 
         // Deploy proxy
         ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
 
         // Cast proxy to the OMInterop type
-        interop = OMInterop(address(proxy));
+        interop = OMInterop(payable(address(proxy)));
 
         proxyAdmin = makeAddr("proxyAdmin");
 
@@ -95,7 +101,7 @@ contract LZInteropTest is TestHelperOz5 {
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, sidechainToken, InteropProtocol.LayerZero);
 
-        lzToken.mint(RELAYER, 1e21);
+        vm.deal(address(interop), 1e21 ether);
     }
 
     function _deployOmoftProxy(
@@ -212,7 +218,7 @@ contract LZInteropTest is TestHelperOz5 {
 
         assertEq(remoteOft.balanceOf(remoteRecipient), 0, "remote recipient should start with zero balance");
 
-        (uint256 bridgeFee, address feeToken) = interop.quoteBridgeTo(
+        uint256 bridgeFee = interop.quoteBridgeTo(
             address(0xAA),
             0,
             remoteRecipient,
@@ -224,13 +230,12 @@ contract LZInteropTest is TestHelperOz5 {
             bridgeData,
             BURN_AND_BRIDGE_HASH
         );
-        assertEq(feeToken, address(lzToken), "bridge fee token should be ZRO");
-        assertGt(bridgeFee, 0, "bridge fee should use ZRO tokens");
+        assertGt(bridgeFee, 0, "bridge fee should use OM_TOKEN tokens");
 
         vm.prank(RELAYER);
         lzToken.approve(address(interop), type(uint256).max);
 
-        uint256 relayerLzBefore = lzToken.balanceOf(RELAYER);
+        uint256 relayerNativeBefore = address(interop).balance;
         uint256 omLzBefore = lzToken.balanceOf(address(interop));
         vm.recordLogs();
         vm.prank(RELAYER);
@@ -246,13 +251,15 @@ contract LZInteropTest is TestHelperOz5 {
             bridgeData,
             BURN_AND_BRIDGE_HASH
         );
-        uint256 relayerLzAfter = lzToken.balanceOf(RELAYER);
-        assertEq(relayerLzBefore - relayerLzAfter, MOCK_LZ_TOKEN_FEE, "relayer should fund LZ fee");
+        uint256 relayerNativeAfter = address(interop).balance;
+        assertEq(
+            relayerNativeBefore - relayerNativeAfter, MOCK_NATIVE_TOKEN_FEE, "relayer should fund fee with native token"
+        );
         uint256 omLzAfter = lzToken.balanceOf(address(interop));
-        assertEq(omLzAfter, omLzBefore, "OMInterop should not retain LZ tokens");
+        assertEq(omLzAfter, omLzBefore, "OMInterop should not retain tokens");
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        require(logs.length > 6, "expected OMInteropSent log");
-        Vm.Log memory entry = logs[6]; // seventh log is OMInteropSent
+        assertGt(logs.length, 2, "expected OMInteropSent log");
+        Vm.Log memory entry = logs[2]; // seventh log is OMInteropSent
         bytes32 sentSig = keccak256("OMInteropSent(uint64,address,uint256,address,uint32,bytes32)");
         assertEq(entry.emitter, address(interop), "OMInteropSent emitter mismatch");
         assertEq(entry.topics.length, 3, "OMInteropSent topics length mismatch");
@@ -263,7 +270,9 @@ contract LZInteropTest is TestHelperOz5 {
         assertEq(omToken, OM_TOKEN, "OMInteropSent token mismatch");
         (uint64 nonce_, uint256 refundAmount, uint32 dstChainId) = abi.decode(entry.data, (uint64, uint256, uint32));
         assertEq(dstChainId, REMOTE_EID, "OMInteropSent chain mismatch");
-        assertEq(refundAmount, 0, "refund should be zero for LayerZero");
+        assertEq(
+            refundAmount, bridgeFee, "refund should be escrowFee - used fee, so bridgeFee * 2 - bridgeFee = bridgeFee"
+        );
         uint64 latestNonce = interop.getLatestInboundNonce();
         assertEq(nonce_ + 1, latestNonce, "event nonce should match latest inbound");
 

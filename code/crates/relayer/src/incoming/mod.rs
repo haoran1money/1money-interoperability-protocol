@@ -178,6 +178,15 @@ pub async fn relay_incoming_events(
                     "Ignoring Upgraded event"
                 );
             }
+            OMInterop::OMInteropEvents::PriceOracleUpdated(_) => {
+                warn!(
+                    ?block_number,
+                    ?log_index,
+                    ?tx_hash,
+                    address = ?log.address,
+                    "Ignoring PriceOracleUpdated event"
+                );
+            }
         }
     }
 

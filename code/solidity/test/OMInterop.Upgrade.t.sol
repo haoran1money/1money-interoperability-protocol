@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import {OMInterop} from "../src/OMInterop.sol";
+import {PriceOracle} from "../src/PriceOracle.sol";
 import {IOMInterop, InteropProtocol} from "../src/IOMInterop.sol";
 import {OMInteropV2} from "./OMInteropV2.sol";
 
@@ -16,7 +17,7 @@ interface IUUPSUpgradeable {
 contract UpgradeTest is Test {
     OMInterop implV1;
     OMInterop om;
-    address proxy;
+    address payable proxy;
 
     address internal constant OWNER = address(0xA11CE);
     address internal constant OPERATOR = address(0xB0B);
@@ -28,18 +29,22 @@ contract UpgradeTest is Test {
     bytes32 internal constant BURN_AND_BRIDGE_HASH = keccak256("burnandbridgeTxHash");
 
     function setUp() public {
+        PriceOracle oracle = new PriceOracle(OWNER, OPERATOR);
+
+        // TODO: map token prices
+
         // Deploy V1 implementation
         implV1 = new OMInterop();
 
-        bytes32 uuid1 = OMInterop(address(implV1)).proxiableUUID();
+        bytes32 uuid1 = OMInterop(payable(address(implV1))).proxiableUUID();
         assertTrue(uuid1 != bytes32(0), "implV1 not UUPS");
 
         // Prepare initializer calldata
-        bytes memory init = abi.encodeCall(OMInterop.initialize, (OWNER, OPERATOR, RELAYER));
+        bytes memory init = abi.encodeCall(OMInterop.initialize, (OWNER, OPERATOR, RELAYER, address(oracle)));
 
         // Deploy ERC1967 proxy pointing to V1, run initializer
-        ERC1967Proxy p = new ERC1967Proxy(address(implV1), init);
-        proxy = address(p);
+        ERC1967Proxy p = new ERC1967Proxy(payable(address(implV1)), init);
+        proxy = payable(address(p));
 
         // Interact through the proxy using V1 ABI
         om = OMInterop(proxy);
@@ -57,7 +62,7 @@ contract UpgradeTest is Test {
 
         {
             // calling proxiableUUID on the *implementation* (not proxy) must not revert
-            bytes32 uuid = OMInterop(address(implV1)).proxiableUUID();
+            bytes32 uuid = OMInterop(payable(address(implV1))).proxiableUUID();
             // not strictly required to compare the value; presence is enough
             assertTrue(uuid != bytes32(0), "implV1 not UUPS");
         }
@@ -90,7 +95,7 @@ contract UpgradeTest is Test {
 
         vm.prank(OWNER);
         {
-            bytes32 uuid2 = OMInterop(address(implV2)).proxiableUUID();
+            bytes32 uuid2 = OMInterop(payable(address(implV2))).proxiableUUID();
             assertTrue(uuid2 != bytes32(0), "implV2 not UUPS");
         }
         vm.prank(OWNER);

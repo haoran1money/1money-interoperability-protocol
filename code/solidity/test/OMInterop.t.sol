@@ -4,6 +4,7 @@ pragma solidity ^0.8.22;
 import {Test} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {OMInterop} from "../src/OMInterop.sol";
+import {PriceOracle} from "../src/PriceOracle.sol";
 import {IOMInterop, InteropProtocol} from "../src/IOMInterop.sol";
 
 contract OMInteropTest is Test {
@@ -20,15 +21,19 @@ contract OMInteropTest is Test {
     function setUp() public {
         vm.prank(OWNER);
 
+        PriceOracle oracle = new PriceOracle(OWNER, OPERATOR);
+
+        // TODO: map token prices
+
         OMInterop impl = new OMInterop();
 
-        bytes memory initData = abi.encodeCall(OMInterop.initialize, (OWNER, OPERATOR, RELAYER));
+        bytes memory initData = abi.encodeCall(OMInterop.initialize, (OWNER, OPERATOR, RELAYER, address(oracle)));
 
         // Deploy proxy
         ERC1967Proxy proxy = new ERC1967Proxy(address(impl), initData);
 
         // Cast proxy to the OMInterop type
-        interop = OMInterop(address(proxy));
+        interop = OMInterop(payable(address(proxy)));
 
         // 10'000 tokens every hour
         vm.prank(OPERATOR);

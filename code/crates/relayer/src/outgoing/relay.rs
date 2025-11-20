@@ -4,7 +4,7 @@ use alloy_primitives::Bytes;
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::{OMInterop, TxHashMapping};
 use onemoney_protocol::{Client, Transaction, TxPayload};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::config::{Config, RelayerNonce};
 use crate::outgoing::error::Error;
@@ -77,13 +77,26 @@ pub async fn process_burn_and_bridge_transactions(
 
     debug!(burnAndBridgeHas = %tx.hash, "Will register withdrawal transaction hash");
 
-    mapping_contract
+    if let Err(e) = mapping_contract
         .registerWithdrawal(tx.hash)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
-        .await?
+        .await
+        .map(Ok)
+        .or_else(|e| {
+            e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
+                .map(Err)
+        })?
+        .map_err(Error::MappingContractReverted)?
         .get_receipt()
-        .await?;
+        .await
+    {
+        warn!(
+            %tx.hash,
+            error = %e,
+            "Failed to register withdrawal transaction hash"
+        );
+    }
 
     let checkpoint_number = tx.checkpoint_number.ok_or(Error::MissingCheckpointNumber)?;
 
@@ -144,13 +157,27 @@ pub async fn process_burn_and_bridge_transactions(
 
     debug!(burnAndBridgeHas = %tx.hash, bridgeToHash = %tx_receipt.transaction_hash, "Will link withdrawal transaction hash");
 
-    mapping_contract
+    if let Err(e) = mapping_contract
         .linkWithdrawalHashes(tx.hash, tx_receipt.transaction_hash)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
-        .await?
+        .await
+        .map(Ok)
+        .or_else(|e| {
+            e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
+                .map(Err)
+        })?
+        .map_err(Error::MappingContractReverted)?
         .get_receipt()
-        .await?;
+        .await
+    {
+        warn!(
+            %tx.hash,
+            %tx_receipt.transaction_hash,
+            error = %e,
+            "Failed to link withdrawal transaction hashes"
+        );
+    }
 
     Ok(())
 }

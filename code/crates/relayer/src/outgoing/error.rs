@@ -18,6 +18,8 @@ pub enum Error {
     Sidechain(#[from] crate::onemoney::error::Error),
     #[error("Contract reverted: {0:?}")]
     ContractReverted(onemoney_interop::contract::OMInterop::OMInteropErrors),
+    #[error("Contract reverted: {0:?}")]
+    MappingContractReverted(onemoney_interop::contract::TxHashMapping::TxHashMappingErrors),
     #[error("Missing checkpoint number in transaction")]
     MissingCheckpointNumber,
     #[error("Generic error: {0}")]

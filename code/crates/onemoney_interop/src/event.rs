@@ -13,6 +13,8 @@ use crate::error::Error as OMInteropError;
 /// Convenience alias for decoded OMInterop logs.
 pub type OMInteropLog = RpcLog<OMInterop::OMInteropEvents>;
 
+const MAX_BLOCK_RANGE: u64 = 100_000;
+
 /// Creates an async stream of OMInterop events starting at `from_block`.
 ///
 /// The stream first yields any historical events since `from_block`, then
@@ -46,10 +48,16 @@ pub async fn event_stream(
         // Five blocks is enough cushion for the reorg depths we expect.
         let live_start = latest_block.saturating_add(5);
 
-        if from_block <= live_start {
+        let mut start = from_block;
+
+        // Get chunks of 99_999 blocks to avoid error:
+        // query exceeds block range 100_000
+        while start <= live_start {
+            let end = core::cmp::min(start + MAX_BLOCK_RANGE - 1, live_start);
+
             let history_filter = Filter::new()
                 .address(contract)
-                .select(from_block..=live_start);
+                .select(start..=end);
 
             let historical = http_provider.get_logs(&history_filter).await?;
 
@@ -71,6 +79,8 @@ pub async fn event_stream(
                 }
                 yield log;
             }
+
+            start = end + 1;
         }
 
         while let Some(log) = live_stream.next().await {

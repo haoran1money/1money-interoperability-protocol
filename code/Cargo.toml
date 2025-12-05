@@ -34,6 +34,7 @@ alloy-primitives     = { version = "1" }
 alloy-signer-local   = { version = "1" }
 alloy-sol-types      = { version = "1" }
 alloy-contract       = { version = "1" }
+alloy-consensus      = { version = "1" }
 alloy-signer         = { version = "1" }
 alloy-sol-macro      = { version = "1" }
 alloy-rpc-types      = { version = "1" }

@@ -2,9 +2,13 @@ use core::future::Future;
 use core::time::Duration;
 
 use relayer::config::Config;
-use relayer::incoming::recovery::get_latest_incomplete_block_number;
+use relayer::incoming::recovery::{
+    get_latest_incomplete_block_number, recover_incomplete_deposit_hash_mapping,
+};
 use relayer::incoming::relay_incoming_events;
-use relayer::outgoing::recovery::get_earliest_incomplete_checkpoint_number;
+use relayer::outgoing::recovery::{
+    get_earliest_incomplete_checkpoint_number, recover_incomplete_withdrawals_hash_mapping,
+};
 use relayer::outgoing::stream::relay_outgoing_events;
 use tracing::{debug, error, info, warn};
 
@@ -60,6 +64,8 @@ where
         let config = config.clone();
         let relayer_nonce = relayer_nonce.clone();
         async move {
+            // Start Tx Hash Mapping recovery from checkpoint 0
+            recover_incomplete_deposit_hash_mapping(&config, relayer_nonce.clone(), None).await?;
             let from_block = get_latest_incomplete_block_number(&config).await?;
             info!(from_block = %from_block, "Will start incoming relayer task");
             let relayer_result =
@@ -75,6 +81,9 @@ where
     let mut relayer_outgoing_task = tokio::spawn({
         let config = config.clone();
         async move {
+            // Start Tx Hash Mapping recovery from checkpoint 0
+            recover_incomplete_withdrawals_hash_mapping(&config, relayer_nonce.clone(), None, None)
+                .await?;
             let start_checkpoint = get_earliest_incomplete_checkpoint_number(&config).await?;
             info!(start_checkpoint = %start_checkpoint, "Will start outgoing relayer task");
             let relayer_result =

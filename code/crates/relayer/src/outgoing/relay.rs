@@ -77,7 +77,7 @@ pub async fn process_burn_and_bridge_transactions(
 
     debug!(burnAndBridgeHas = %tx.hash, "Will register withdrawal transaction hash");
 
-    if let Err(e) = mapping_contract
+    match mapping_contract
         .registerWithdrawal(tx.hash)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
@@ -87,15 +87,26 @@ pub async fn process_burn_and_bridge_transactions(
             e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
                 .map(Err)
         })?
-        .map_err(Error::MappingContractReverted)?
-        .get_receipt()
-        .await
+        .map_err(Error::MappingContractReverted)
     {
-        warn!(
-            %tx.hash,
-            error = %e,
-            "Failed to register withdrawal transaction hash"
-        );
+        Ok(pending_tx) => {
+            if let Err(e) = pending_tx.get_receipt().await {
+                warn!(
+                    %tx.hash,
+                    error = %e,
+                    "Failed to retrieve withdrawal transaction hash link receipt"
+                );
+            }
+        }
+        Err(e) => {
+            // If send failed, decrement the nonce
+            relayer_nonce.fetch_sub(1, Ordering::SeqCst);
+            warn!(
+                %tx.hash,
+                error = %e,
+                "Failed to register withdrawal transaction hash"
+            );
+        }
     }
 
     let checkpoint_number = tx.checkpoint_number.ok_or(Error::MissingCheckpointNumber)?;
@@ -128,6 +139,18 @@ pub async fn process_burn_and_bridge_transactions(
     // For now, we pass an empty bytes array.
     let bridge_data = Bytes::new();
 
+    let latest_bb = contract.getLatestProcessedNonce(sender).call().await?;
+    warn!(
+        queried_bb = latest_bb,
+        event_bb = bbnonce,
+        "will send bridge to"
+    );
+
+    if latest_bb > bbnonce {
+        warn!(burn_and_bridge_hash=%tx.hash, "Skipping BurnAndBridge as it was already processed");
+        return Ok(());
+    }
+
     let tx_receipt = contract
         .bridgeTo(
             sender,
@@ -157,7 +180,7 @@ pub async fn process_burn_and_bridge_transactions(
 
     debug!(burnAndBridgeHas = %tx.hash, bridgeToHash = %tx_receipt.transaction_hash, "Will link withdrawal transaction hash");
 
-    if let Err(e) = mapping_contract
+    match mapping_contract
         .linkWithdrawalHashes(tx.hash, tx_receipt.transaction_hash)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
@@ -167,16 +190,28 @@ pub async fn process_burn_and_bridge_transactions(
             e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
                 .map(Err)
         })?
-        .map_err(Error::MappingContractReverted)?
-        .get_receipt()
-        .await
+        .map_err(Error::MappingContractReverted)
     {
-        warn!(
-            %tx.hash,
-            %tx_receipt.transaction_hash,
-            error = %e,
-            "Failed to link withdrawal transaction hashes"
-        );
+        Ok(pending_tx) => {
+            if let Err(e) = pending_tx.get_receipt().await {
+                warn!(
+                    burn_and_bridge_hash=%tx.hash,
+                    bridge_to_hash=%tx_receipt.transaction_hash,
+                    error = %e,
+                    "Failed to retrieve `linkWithdrawalHashes` receipt"
+                );
+            }
+        }
+        Err(e) => {
+            // If send failed, decrement the nonce
+            relayer_nonce.fetch_sub(1, Ordering::SeqCst);
+            warn!(
+                    burn_and_bridge_hash=%tx.hash,
+                    bridge_to_hash=%tx_receipt.transaction_hash,
+                error = %e,
+                "Failed to link withdrawal hashes"
+            );
+        }
     }
 
     Ok(())

@@ -262,7 +262,7 @@ contract LZInteropTest is TestHelperOz5 {
         Vm.Log memory entry = logs[2]; // seventh log is OMInteropSent
         bytes32 sentSig = keccak256("OMInteropSent(uint64,address,uint256,address,uint32,bytes32)");
         assertEq(entry.emitter, address(interop), "OMInteropSent emitter mismatch");
-        assertEq(entry.topics.length, 3, "OMInteropSent topics length mismatch");
+        assertEq(entry.topics.length, 4, "OMInteropSent topics length mismatch");
         assertEq(entry.topics[0], sentSig, "log 6 should be OMInteropSent");
         address from = address(uint160(uint256(entry.topics[1])));
         address omToken = address(uint160(uint256(entry.topics[2])));

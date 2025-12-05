@@ -7,9 +7,13 @@ use tracing::info;
 
 use crate::config::Config;
 use crate::error::Error as CliError;
-use crate::incoming::recovery::get_latest_incomplete_block_number;
+use crate::incoming::recovery::{
+    get_latest_incomplete_block_number, recover_incomplete_deposit_hash_mapping,
+};
 use crate::incoming::relay_incoming_events;
-use crate::outgoing::recovery::get_earliest_incomplete_checkpoint_number;
+use crate::outgoing::recovery::{
+    get_earliest_incomplete_checkpoint_number, recover_incomplete_withdrawals_hash_mapping,
+};
 use crate::outgoing::stream::relay_outgoing_events;
 use crate::poa::relay_poa_events;
 
@@ -41,6 +45,11 @@ pub enum Commands {
             help = "Starting block number on the sidechain to scan for events (inclusive). If no value is given the number will be computed."
         )]
         from_block: Option<u64>,
+        #[arg(
+            long,
+            help = "Starting checkpoint for Tx Hash Mapping recovery (inclusive). Defaults to 0"
+        )]
+        start_checkpoint_hash_mapping_recovery: Option<u64>,
     },
     /// Relay 1Money interoperability events into Sidechain
     Onemoney {
@@ -56,6 +65,16 @@ pub enum Commands {
             help = "Polling interval for fetching checkpoints (human-friendly, e.g. 10s, 1m)"
         )]
         poll_interval: Duration,
+        #[arg(
+            long,
+            help = "Starting checkpoint for Tx Hash Mapping recovery (inclusive). Defaults to 0"
+        )]
+        start_checkpoint_hash_mapping_recovery: Option<u64>,
+        #[arg(
+            long,
+            help = "Starting block for Tx Hash Mapping recovery (inclusive). Defaults to 0"
+        )]
+        start_block_hash_mapping_recovery: Option<u64>,
     },
     /// Relay events from both sides concurrently
     All {
@@ -83,6 +102,16 @@ pub enum Commands {
             help = "Polling interval for fetching checkpoints (human-friendly, e.g. 10s, 1m)"
         )]
         one_money_poll_interval: Duration,
+        #[arg(
+            long,
+            help = "Starting checkpoint for Tx Hash Mapping recovery (inclusive). Defaults to 0"
+        )]
+        start_checkpoint_hash_mapping_recovery: Option<u64>,
+        #[arg(
+            long,
+            help = "Starting block for Tx Hash Mapping recovery (inclusive). Defaults to 0"
+        )]
+        start_block_hash_mapping_recovery: Option<u64>,
     },
 }
 
@@ -102,7 +131,16 @@ impl Cli {
                 );
                 relay_poa_events(&config, sidechain_relayer_nonce.clone(), poll_interval).await?;
             }
-            Commands::Sidechain { from_block } => {
+            Commands::Sidechain {
+                from_block,
+                start_checkpoint_hash_mapping_recovery,
+            } => {
+                recover_incomplete_deposit_hash_mapping(
+                    &config,
+                    sidechain_relayer_nonce.clone(),
+                    start_checkpoint_hash_mapping_recovery,
+                )
+                .await?;
                 let from_block = if let Some(block_number) = from_block {
                     block_number
                 } else {
@@ -127,7 +165,16 @@ impl Cli {
             Commands::Onemoney {
                 start_checkpoint,
                 poll_interval,
+                start_checkpoint_hash_mapping_recovery,
+                start_block_hash_mapping_recovery,
             } => {
+                recover_incomplete_withdrawals_hash_mapping(
+                    &config,
+                    sidechain_relayer_nonce.clone(),
+                    start_checkpoint_hash_mapping_recovery,
+                    start_block_hash_mapping_recovery,
+                )
+                .await?;
                 let start_checkpoint = if let Some(start_checkpoint) = start_checkpoint {
                     start_checkpoint
                 } else {
@@ -159,7 +206,22 @@ impl Cli {
                 from_block,
                 start_checkpoint,
                 one_money_poll_interval,
+                start_checkpoint_hash_mapping_recovery,
+                start_block_hash_mapping_recovery,
             } => {
+                recover_incomplete_deposit_hash_mapping(
+                    &config,
+                    sidechain_relayer_nonce.clone(),
+                    start_checkpoint_hash_mapping_recovery,
+                )
+                .await?;
+                recover_incomplete_withdrawals_hash_mapping(
+                    &config,
+                    sidechain_relayer_nonce.clone(),
+                    start_checkpoint_hash_mapping_recovery,
+                    start_block_hash_mapping_recovery,
+                )
+                .await?;
                 let start_checkpoint = if let Some(start_checkpoint) = start_checkpoint {
                     start_checkpoint
                 } else {

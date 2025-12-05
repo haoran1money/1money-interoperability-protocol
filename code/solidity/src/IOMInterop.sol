@@ -34,7 +34,7 @@ interface IOMInterop {
         uint256 refundAmount,
         address indexed omToken,
         uint32 dstChainId,
-        bytes32 sourceHash
+        bytes32 indexed sourceHash
     );
 
     /// @notice Records an incoming cross-chain transfer emitted by the token bridge.

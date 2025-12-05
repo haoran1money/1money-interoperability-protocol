@@ -110,7 +110,7 @@ impl<'a> Relayer1MoneyContext<'a> {
 
         debug!(bridgeFromHash = %source_tx_hash, "Will register deposit transaction hash");
 
-        if let Err(e) = mapping_contract
+        match mapping_contract
             .registerDeposit(source_tx_hash)
             .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
             .send()
@@ -120,15 +120,26 @@ impl<'a> Relayer1MoneyContext<'a> {
                 e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
                     .map(Err)
             })?
-            .map_err(IncomingError::MappingContractReverted)?
-            .get_receipt()
-            .await
+            .map_err(IncomingError::MappingContractReverted)
         {
-            warn!(
-                %source_tx_hash,
-                error = %e,
-                "Failed to register deposit transaction hash"
-            );
+            Ok(pending_tx) => {
+                if let Err(e) = pending_tx.get_receipt().await {
+                    warn!(
+                        bridge_from_hash=%source_tx_hash,
+                        error = %e,
+                        "Failed to retrieve `registerDeposit` receipt"
+                    );
+                }
+            }
+            Err(e) => {
+                // If send failed, decrement the nonce
+                relayer_nonce.fetch_sub(1, Ordering::SeqCst);
+                warn!(
+                    bridge_from_hash=%source_tx_hash,
+                    error = %e,
+                    "Failed to register deposit transaction hash"
+                );
+            }
         }
 
         let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
@@ -152,7 +163,7 @@ impl<'a> Relayer1MoneyContext<'a> {
 
         debug!(bridgeFromHash = %source_tx_hash, bridgeAndMintHash = %tx_response.hash, "Will link deposit transaction hashes");
 
-        if let Err(e) = mapping_contract
+        match mapping_contract
             .linkDepositHashes(source_tx_hash, tx_response.hash)
             .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
             .send()
@@ -162,16 +173,28 @@ impl<'a> Relayer1MoneyContext<'a> {
                 e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
                     .map(Err)
             })?
-            .map_err(IncomingError::MappingContractReverted)?
-            .get_receipt()
-            .await
+            .map_err(IncomingError::MappingContractReverted)
         {
-            warn!(
-                %source_tx_hash,
-                %tx_response.hash,
-                error = %e,
-                "Failed to link deposit transaction hashes"
-            );
+            Ok(pending_tx) => {
+                if let Err(e) = pending_tx.get_receipt().await {
+                    warn!(
+                        bridge_from_hash=%source_tx_hash,
+                        bridge_and_mint_hash=%tx_response.hash,
+                        error = %e,
+                        "Failed to retrieve `linkDepositHashes` receipt"
+                    );
+                }
+            }
+            Err(e) => {
+                // If send failed, decrement the nonce
+                relayer_nonce.fetch_sub(1, Ordering::SeqCst);
+                warn!(
+                    bridge_from_hash=%source_tx_hash,
+                    bridge_and_mint_hash=%tx_response.hash,
+                    error = %e,
+                    "Failed to link deposit hashes"
+                );
+            }
         }
 
         Ok(tx_response)
@@ -213,7 +236,7 @@ impl<'a> Relayer1MoneyContext<'a> {
 
         debug!(burnAndBridgeHas = %source_hash, refundHash = %tx_response.hash, "Will link refund transaction hash");
 
-        if let Err(e) = mapping_contract
+        match mapping_contract
             .linkRefundHashes(source_hash, tx_response.hash)
             .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
             .send()
@@ -223,16 +246,28 @@ impl<'a> Relayer1MoneyContext<'a> {
                 e.try_decode_into_interface_error::<TxHashMapping::TxHashMappingErrors>()
                     .map(Err)
             })?
-            .map_err(IncomingError::MappingContractReverted)?
-            .get_receipt()
-            .await
+            .map_err(IncomingError::MappingContractReverted)
         {
-            warn!(
-                %source_hash,
-                %tx_response.hash,
-                error = %e,
-                "Failed to link refund transaction hashes"
-            );
+            Ok(pending_tx) => {
+                if let Err(e) = pending_tx.get_receipt().await {
+                    warn!(
+                        burn_and_bridge_hash=%source_hash,
+                        refund_hash=%tx_response.hash,
+                        error = %e,
+                        "Failed to retrieve `linkRefundHashes` receipt"
+                    );
+                }
+            }
+            Err(e) => {
+                // If send failed, decrement the nonce
+                relayer_nonce.fetch_sub(1, Ordering::SeqCst);
+                warn!(
+                    burn_and_bridge_hash=%source_hash,
+                    refund_hash=%tx_response.hash,
+                    error = %e,
+                    "Failed to link refund hash"
+                );
+            }
         }
 
         Ok(tx_response)

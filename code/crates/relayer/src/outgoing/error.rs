@@ -14,6 +14,8 @@ pub enum Error {
     ContractCall(#[from] alloy_contract::Error),
     #[error("Pending transaction failed: {0}")]
     PendingTransaction(#[from] alloy_provider::PendingTransactionError),
+    #[error("Alloy RPC Transport error: {0}")]
+    ContractRpcTransport(#[from] alloy_transport::RpcError<alloy_transport::TransportErrorKind>),
     #[error(transparent)]
     Sidechain(#[from] crate::onemoney::error::Error),
     #[error("Contract reverted: {0:?}")]

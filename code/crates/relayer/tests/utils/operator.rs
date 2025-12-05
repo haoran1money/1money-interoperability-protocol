@@ -12,7 +12,6 @@ use onemoney_protocol::{
 };
 use tracing::{debug, info, warn};
 
-use super::account::fetch_account_context;
 use super::transaction::types::{TokenIssuePayload, TokenIssueRequest, TokenIssueResponse};
 use super::{poll_with_timeout, MAX_DURATION, POLL_INTERVAL};
 use crate::utils::transaction::wait_for_transaction;
@@ -49,17 +48,15 @@ impl<'a> OperationClient<'a> {
                 let symbol = symbol.clone();
                 let name = name.clone();
                 async move {
-                    let (recent_checkpoint, nonce) =
-                        match fetch_account_context(client, operator_address).await {
-                            Ok(context) => context,
-                            Err(err) => {
-                                warn!(?err, "Failed to fetch operator context for token issuance");
-                                return Ok(None);
-                            }
-                        };
+                    let nonce = match client.get_account_nonce(operator_address).await {
+                        Ok(account_nonce) => account_nonce.nonce,
+                        Err(err) => {
+                            warn!(?err, "Failed to fetch operator context for token issuance");
+                            return Ok(None);
+                        }
+                    };
 
                     let payload = TokenIssuePayload {
-                        recent_checkpoint,
                         chain_id,
                         nonce,
                         symbol,
@@ -125,17 +122,15 @@ impl<'a> OperationClient<'a> {
 
         poll_with_timeout("token mint_token", POLL_INTERVAL, MAX_DURATION, {
             move || async move {
-                let (recent_checkpoint, nonce) =
-                    match fetch_account_context(client, operator_address).await {
-                        Ok(context) => context,
-                        Err(err) => {
-                            warn!(?err, "Failed to fetch operator context for token issuance");
-                            return Ok(None);
-                        }
-                    };
+                let nonce = match client.get_account_nonce(operator_address).await {
+                    Ok(account_nonce) => account_nonce.nonce,
+                    Err(err) => {
+                        warn!(?err, "Failed to fetch operator context for token issuance");
+                        return Ok(None);
+                    }
+                };
 
                 let payload = TokenMintPayload {
-                    recent_checkpoint,
                     chain_id,
                     nonce,
                     recipient,
@@ -187,21 +182,19 @@ impl<'a> OperationClient<'a> {
             POLL_INTERVAL,
             MAX_DURATION,
             move || async move {
-                let (recent_checkpoint, nonce) =
-                    match fetch_account_context(client, operator_address).await {
-                        Ok(context) => context,
-                        Err(err) => {
-                            warn!(
-                                ?err,
-                                ?authority_type,
-                                "Failed to fetch operator context for authority grant"
-                            );
-                            return Ok(None);
-                        }
-                    };
+                let nonce = match client.get_account_nonce(operator_address).await {
+                    Ok(account_nonce) => account_nonce.nonce,
+                    Err(err) => {
+                        warn!(
+                            ?err,
+                            ?authority_type,
+                            "Failed to fetch operator context for authority grant"
+                        );
+                        return Ok(None);
+                    }
+                };
 
                 let payload = TokenAuthorityPayload {
-                    recent_checkpoint,
                     chain_id,
                     nonce,
                     token,

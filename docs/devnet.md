@@ -4,6 +4,7 @@ Run every command from the `1money-interoperability-protocol` repo root.
 
 ## Prerequisites
 
+- l1client at commit `da917407d8b162ba2529af9f6cf98ef9a7dae161`
 - l1client tools are built and available on `PATH`.
   - Example: `export PATH=$PATH:$PATH_TO_L1CLIENT_DIR/target/debug`
 - 1money devnet, running 1money endpoint at `http://127.0.0.1:18555` by
@@ -99,6 +100,7 @@ PRICEORACLE_DEPLOY_OUTPUT=$(cast send \
   --rpc-url $SIDECHAIN_RPC \
   --private-key $OWNER_PRIVATE_KEY \
   --create $PRICEORACLE_BYTECODE "constructor(address,address)" $OWNER_ADDRESS $OPERATOR_ADDRESS)
+
 # extract deployed contract address
 PRICEORACLE_CONTRACT_ADDRESS=$(echo $PRICEORACLE_DEPLOY_OUTPUT | jq -r '.contractAddress')
 
@@ -145,6 +147,7 @@ cast send \
 TXHASHMAPPING_BYTECODE=$(jq -r '.bytecode.object' code/solidity/out/TxHashMapping.sol/TxHashMapping.json)
 
 TXHASHMAPPING_DEPLOY_OUTPUT=$(cast send --json --rpc-url $SIDECHAIN_RPC --private-key $OWNER_PRIVATE_KEY --create $TXHASHMAPPING_BYTECODE "constructor(address,address)" $OWNER_ADDRESS $RELAYER_ADDRESS)
+
 # extract deployed contract address
 TXHASHMAPPING_CONTRACT_ADDRESS=$(echo $TXHASHMAPPING_DEPLOY_OUTPUT | jq -r '.contractAddress')
 
@@ -202,6 +205,7 @@ cargo run --bin relayer -- --relayer-private-key $RELAYER_PRIVATE_KEY --interop-
 cast send $INTEROP_CONTRACT_ADDRESS "bridgeFrom(address,uint256)" $USER_ADDRESS 100000000000000000000 --rpc-url $SIDECHAIN_RPC --private-key $SC_TOKEN_PRIVATE_KEY
 # check the user balance after deposit; it should be 755
 ```
+
 ### Withdrawal from Onemoney to Sidechain
 
 ```bash

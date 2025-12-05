@@ -29,8 +29,15 @@ fn build_epoch_response(
                 "message": {
                     "epoch": { "epoch_id": epoch_id },
                     "chain": 1,
-                    "operator_public_key": consensus_key_hex,
-                    "operator_address": operator_address,
+                    "special_accounts": {
+                        // reuse the same key/address, update if needed
+                        "operator_public_key": consensus_key_hex,
+                        "operator_address": operator_address,
+                        "escrow_account_public_key": consensus_key_hex,
+                        "escrow_account_address": operator_address,
+                        "pricing_authority_public_key": consensus_key_hex,
+                        "pricing_authority_address": operator_address,
+                    },
                     "validator_set": {
                         "members": [{
                             "consensus_public_key": consensus_key_hex,

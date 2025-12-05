@@ -107,12 +107,10 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
                 "Invoking payment in 1Money"
             );
 
-            let recent_checkpoint = onemoney_client.get_checkpoint_number().await?.number;
             let chain_id = onemoney_client.fetch_chain_id_from_network().await?;
             let sender_nonce = onemoney_client.get_account_nonce(sender).await?.nonce;
 
             let payload = PaymentPayload {
-                recent_checkpoint,
                 chain_id,
                 nonce: sender_nonce,
                 recipient,
@@ -298,12 +296,10 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
                 "Invoking payment in 1Money"
             );
 
-            let recent_checkpoint = onemoney_client.get_checkpoint_number().await?.number;
             let chain_id = onemoney_client.fetch_chain_id_from_network().await?;
             let sender_nonce = onemoney_client.get_account_nonce(sender).await?.nonce;
 
             let payload = PaymentPayload {
-                recent_checkpoint,
                 chain_id,
                 nonce: sender_nonce,
                 recipient,
@@ -448,12 +444,10 @@ async fn test_clear_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Re
         "Invoking payment in 1Money"
     );
 
-    let recent_checkpoint = onemoney_client.get_checkpoint_number().await?.number;
     let chain_id = onemoney_client.fetch_chain_id_from_network().await?;
     let sender_nonce = onemoney_client.get_account_nonce(sender).await?.nonce;
 
     let payload = PaymentPayload {
-        recent_checkpoint,
         chain_id,
         nonce: sender_nonce,
         recipient,

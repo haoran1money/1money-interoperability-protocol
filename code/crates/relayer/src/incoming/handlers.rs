@@ -142,10 +142,7 @@ impl<'a> Relayer1MoneyContext<'a> {
             }
         }
 
-        let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
-
         let payload = TokenBridgeAndMintPayload {
-            recent_checkpoint,
             chain_id: self.chain_id,
             nonce: sidechain_nonce,
             recipient: to,
@@ -218,10 +215,7 @@ impl<'a> Relayer1MoneyContext<'a> {
             .connect_http(config.side_chain_http_url.clone());
         let mapping_contract = TxHashMapping::new(config.tx_mapping_contract_address, provider);
 
-        let recent_checkpoint = self.client.get_checkpoint_number().await?.number;
-
         let payload = PaymentPayload {
-            recent_checkpoint,
             chain_id: self.chain_id,
             nonce: sidechain_nonce,
             recipient: from,

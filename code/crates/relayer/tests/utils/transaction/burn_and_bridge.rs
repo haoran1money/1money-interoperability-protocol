@@ -8,7 +8,6 @@ use onemoney_protocol::responses::TransactionResponse;
 use onemoney_protocol::{Client, TokenBurnAndBridgePayload};
 use tracing::{info, warn};
 
-use crate::utils::account::fetch_account_context;
 use crate::utils::transaction::wait_for_transaction;
 use crate::utils::{poll_with_timeout, MAX_DURATION, POLL_INTERVAL};
 
@@ -32,17 +31,15 @@ pub async fn burn_and_bridge(
             let client = Client::custom(client_url_owned)
                 .expect("failed to create 1Money client with url {client_url}");
             async move {
-                let (recent_checkpoint, nonce) =
-                    match fetch_account_context(&client, sender_addr).await {
-                        Ok(context) => context,
-                        Err(err) => {
-                            warn!(?err, "Failed to fetch operator context for token issuance");
-                            return Ok(None);
-                        }
-                    };
+                let nonce = match client.get_account_nonce(sender_addr).await {
+                    Ok(account_nonce) => account_nonce.nonce,
+                    Err(err) => {
+                        warn!(?err, "Failed to fetch operator context for token issuance");
+                        return Ok(None);
+                    }
+                };
 
                 let payload = TokenBurnAndBridgePayload {
-                    recent_checkpoint,
                     chain_id,
                     nonce,
                     token,
@@ -52,6 +49,7 @@ pub async fn burn_and_bridge(
                     destination_address: receiver.to_string(),
                     escrow_fee,
                     bridge_metadata: None,
+                    bridge_param: None,
                 };
 
                 let response = match client

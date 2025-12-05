@@ -140,11 +140,6 @@ pub async fn process_burn_and_bridge_transactions(
     let bridge_data = Bytes::new();
 
     let latest_bb = contract.getLatestProcessedNonce(sender).call().await?;
-    warn!(
-        queried_bb = latest_bb,
-        event_bb = bbnonce,
-        "will send bridge to"
-    );
 
     if latest_bb > bbnonce {
         warn!(burn_and_bridge_hash=%tx.hash, "Skipping BurnAndBridge as it was already processed");

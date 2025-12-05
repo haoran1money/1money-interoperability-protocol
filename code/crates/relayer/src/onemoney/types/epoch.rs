@@ -54,10 +54,20 @@ pub struct GovernanceProposal {
 pub struct Message {
     pub epoch: EpochId,
     pub chain: u64,
+    pub special_accounts: SpecialAccounts,
+    pub validator_set: ValidatorSet,
+}
+#[derive(Debug, Deserialize, Clone, PartialEq, Eq)]
+pub struct SpecialAccounts {
     #[serde(deserialize_with = "deserialize_verifying_key")]
     pub operator_public_key: VerifyingKey,
     pub operator_address: Address,
-    pub validator_set: ValidatorSet,
+    #[serde(deserialize_with = "deserialize_verifying_key")]
+    pub escrow_account_public_key: VerifyingKey,
+    pub escrow_account_address: Address,
+    #[serde(deserialize_with = "deserialize_verifying_key")]
+    pub pricing_authority_public_key: VerifyingKey,
+    pub pricing_authority_address: Address,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq)]

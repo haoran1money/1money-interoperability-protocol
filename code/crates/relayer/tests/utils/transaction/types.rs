@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, RlpEncodable, RlpDecodable, Serialize, Deserialize)]
 pub struct TokenIssuePayload {
-    pub recent_checkpoint: u64,
     pub chain_id: u64,
     pub nonce: u64,
     pub symbol: String,

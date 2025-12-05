@@ -108,10 +108,7 @@ async fn recover_incomplete_deposits(#[future] e2e_test_context: E2ETestContext)
         .get_receipt()
         .await?;
 
-    let recent_checkpoint = onemoney_client.get_checkpoint_number().await?.number;
-
     let payload = TokenBridgeAndMintPayload {
-        recent_checkpoint,
         chain_id,
         nonce: sidechain_nonce,
         recipient: to,
@@ -174,10 +171,7 @@ async fn recover_incomplete_deposits(#[future] e2e_test_context: E2ETestContext)
         .get_receipt()
         .await?;
 
-    let recent_checkpoint = onemoney_client.get_checkpoint_number().await?.number;
-
     let payload = TokenBridgeAndMintPayload {
-        recent_checkpoint,
         chain_id,
         nonce: sidechain_nonce,
         recipient: to,
@@ -435,12 +429,9 @@ async fn recover_incomplete_withdrawals(#[future] e2e_test_context: E2ETestConte
     let refund_amount = refund_amount.ok_or_else(|| eyre::eyre!("missing refund_amount"))?;
     let om_token = om_token.ok_or_else(|| eyre::eyre!("missing om_token"))?;
 
-    let recent_checkpoint = onemoney_client.get_checkpoint_number().await?.number;
-
     let chain_id = onemoney_client.fetch_chain_id_from_network().await?;
 
     let payload = PaymentPayload {
-        recent_checkpoint,
         chain_id,
         nonce: sidechain_nonce,
         recipient: from,

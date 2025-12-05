@@ -5,13 +5,6 @@ use tracing::debug;
 
 use crate::utils::{poll_with_timeout, MAX_DURATION, POLL_INTERVAL};
 
-/// Fetches the latest checkpoint number and account nonce for `address`.
-pub async fn fetch_account_context(client: &Client, address: Address) -> Result<(u64, u64)> {
-    let recent_checkpoint = client.get_checkpoint_number().await?.number;
-    let nonce = client.get_account_nonce(address).await?.nonce;
-    Ok((recent_checkpoint, nonce))
-}
-
 /// Reads the balance for `token` and `address`, defaulting to zero if it is missing.
 pub async fn fetch_balance(client: &Client, address: Address, token: Address) -> Result<U256> {
     match client.get_associated_token_account(address, token).await {

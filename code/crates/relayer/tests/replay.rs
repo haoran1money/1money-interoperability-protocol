@@ -12,7 +12,7 @@ use onemoney_protocol::{
     Error as OnemoneyError, PaymentPayload, TokenBridgeAndMintPayload, TokenBurnAndBridgePayload,
 };
 use tracing::{debug, info};
-use utils::account::{fetch_account_context, fetch_balance, wait_for_balance_change};
+use utils::account::{fetch_balance, wait_for_balance_change};
 use utils::setup::{e2e_test_context, E2ETestContext};
 use utils::transaction::wait_for_transaction;
 
@@ -84,10 +84,11 @@ async fn cross_chain_replay_flow_is_enforced(
         "Initial user token balance before bridge_and_mint"
     );
 
-    let (recent_checkpoint, nonce) =
-        fetch_account_context(&onemoney_client, relayer_address).await?;
+    let nonce = onemoney_client
+        .get_account_nonce(relayer_address)
+        .await?
+        .nonce;
     let bridge_payload = TokenBridgeAndMintPayload {
-        recent_checkpoint,
         chain_id,
         nonce,
         recipient: user_address,
@@ -142,10 +143,9 @@ async fn cross_chain_replay_flow_is_enforced(
     info!("Step 2b: begin burn_and_bridge replay validation");
     // --- Step 2b: burn_and_bridge replay -----------------------------------------------------------------------------
     let pre_burn_balance = fetch_balance(&onemoney_client, user_address, token_address).await?;
-    let (recent_checkpoint, nonce) = fetch_account_context(&onemoney_client, user_address).await?;
+    let nonce = onemoney_client.get_account_nonce(user_address).await?.nonce;
     let destination_address = Address::repeat_byte(0xAB);
     let burn_payload = TokenBurnAndBridgePayload {
-        recent_checkpoint,
         chain_id,
         nonce,
         sender: user_address,
@@ -155,6 +155,7 @@ async fn cross_chain_replay_flow_is_enforced(
         destination_address: destination_address.encode_hex_with_prefix(),
         escrow_fee: refund_amount,
         bridge_metadata: None,
+        bridge_param: None,
     };
 
     let first_burn = onemoney_client
@@ -256,14 +257,11 @@ async fn cross_chain_replay_flow_is_enforced(
 
     info!("Step 4: ensure refund payment replay is rejected");
     // --- Step 4: refund payment replay -------------------------------------------------------------------------------
-    let (recent_checkpoint, nonce) =
-        fetch_account_context(&onemoney_client, relayer_address).await?;
     let relayer_balance_before_refund =
         fetch_balance(&onemoney_client, relayer_address, token_address).await?;
     let user_balance_before_refund =
         fetch_balance(&onemoney_client, user_address, token_address).await?;
     let payment_payload = PaymentPayload {
-        recent_checkpoint,
         chain_id,
         nonce,
         recipient: user_address,

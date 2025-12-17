@@ -284,10 +284,7 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
     {
         OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         OMInteropTypes.TokenBinding memory binding = OMInteropTypes.TokenBinding({
-            omToken: omToken,
-            scToken: scToken,
-            interopProtoId: interopProtoId,
-            exists: true
+            omToken: omToken, scToken: scToken, interopProtoId: interopProtoId, exists: true
         });
 
         s.tokensBySidechain[scToken] = binding;

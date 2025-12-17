@@ -58,11 +58,7 @@ abstract contract LZInterop {
         return bytes32(uint256(uint160(account)));
     }
 
-    function _decodeBridgeData(BridgeToRequest memory req)
-        internal
-        view
-        returns (uint128 maxGas, uint256 minAmountLd)
-    {
+    function _decodeBridgeData(BridgeToRequest memory req) internal view returns (uint128 maxGas, uint256 minAmountLd) {
         try this._decodeBridgeDataStrict(req.bridgeData) returns (uint128 gas, uint256 minAmount) {
             maxGas = gas;
             minAmountLd = minAmount;

@@ -30,18 +30,30 @@ contract TxHashMapping is Ownable {
     address public relayer;
 
     modifier onlyRelayer() {
-        if (msg.sender != relayer) revert Unauthorized();
+        _onlyRelayer();
         _;
+    }
+
+    function _onlyRelayer() internal view {
+        if (msg.sender != relayer) revert Unauthorized();
     }
 
     modifier nonZeroHash(bytes32 hash) {
-        if (hash == bytes32(0)) revert InvalidHash();
+        _nonZeroHash(hash);
         _;
     }
 
+    function _nonZeroHash(bytes32 hash) internal pure {
+        if (hash == bytes32(0)) revert InvalidHash();
+    }
+
     modifier nonZeroAddress(address account) {
-        if (account == address(0)) revert InvalidAddress();
+        _nonZeroAddress(account);
         _;
+    }
+
+    function _nonZeroAddress(address account) internal pure {
+        if (account == address(0)) revert InvalidAddress();
     }
 
     // ---------- Storage ----------

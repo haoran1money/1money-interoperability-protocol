@@ -29,13 +29,21 @@ contract PriceOracle is Ownable, ERC165, IPriceOracle {
     address public operator;
 
     modifier onlyOperatorOrOwner() {
-        if (msg.sender != operator && msg.sender != owner()) revert Unauthorized();
+        _onlyOperatorOrOwner();
         _;
     }
 
+    function _onlyOperatorOrOwner() internal view {
+        if (msg.sender != operator && msg.sender != owner()) revert Unauthorized();
+    }
+
     modifier nonZeroAddress(address account) {
-        if (account == address(0)) revert InvalidAddress();
+        _nonZeroAddress(account);
         _;
+    }
+
+    function _nonZeroAddress(address account) internal pure {
+        if (account == address(0)) revert InvalidAddress();
     }
 
     // ---------- ERC-165 ----------

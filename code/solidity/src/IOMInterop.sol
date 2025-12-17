@@ -18,7 +18,6 @@ enum InteropProtocol {
     LayerZero, // 0
     // TODO: remove this in production
     Mock // 1
-
 }
 
 interface IOMInterop {

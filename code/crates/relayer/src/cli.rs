@@ -239,8 +239,8 @@ impl Cli {
                     from_block,
                     poa_poll_interval = %format_duration(poa_poll_interval),
                     one_money_poll_interval = %format_duration(one_money_poll_interval),
-                    onemoney_url = %config.side_chain_http_url,
-                    sidechain_url = %config.one_money_node_url,
+                    onemoney_url = %config.one_money_node_url,
+                    sidechain_url = %config.side_chain_http_url,
                     "Relaying all flows",
                 );
                 try_join3(

@@ -32,19 +32,19 @@ Update the values below before running the block so they match your local RPCs,
 accounts directory, desired token metadata, and deployer key.
 
 ```bash
-MNEMONIC="test test test test test test test test test test test junk"
-ONEMONEY_RPC=http://127.0.0.1:18555
-SIDECHAIN_RPC=http://127.0.0.1:8645
-SIDECHAIN_WS=http://127.0.0.1:8646
-PROFILE=interop-demo
-TOKEN_SYMBOL=OMTST$(date +%s)
-TOKEN_NAME=Interop_Demo_Token
-TOKEN_DECIMALS=18 # use same decimals as sidechain's ERC20 token
-BRIDGE_AMOUNT=75
-ESCROW_FEE=5
-OM_ACCOUNTS_DIR=$(pwd)/code/scripts/.manual/accounts
-OPERATOR_PRIVATE_KEY=0x76700ba1cb72480053d43b6202a16e9acbfb318b0321cfac4e55d38747bf9057
-OPERATOR_FAUCET_AMOUNT=5ether
+export MNEMONIC="test test test test test test test test test test test junk"
+export OM_NODE_URL=http://127.0.0.1:18555
+export SC_HTTP_URL=http://127.0.0.1:8645
+export SC_HTTP_URL=http://127.0.0.1:8646
+export PROFILE=interop-demo
+export TOKEN_SYMBOL=OMTST$(date +%s)
+export TOKEN_NAME=Interop_Demo_Token
+export TOKEN_DECIMALS=18 # use same decimals as sidechain's ERC20 token
+export BRIDGE_AMOUNT=75
+export ESCROW_FEE=5
+export OM_ACCOUNTS_DIR=$(pwd)/code/scripts/.manual/accounts
+export OPERATOR_PRIVATE_KEY=0x76700ba1cb72480053d43b6202a16e9acbfb318b0321cfac4e55d38747bf9057
+export OPERATOR_FAUCET_AMOUNT=5ether
 ```
 
 ## Setup accounts and deploy OMInterop contract

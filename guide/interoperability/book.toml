@@ -1,0 +1,6 @@
+[book]
+authors = ["Luca Joss"]
+language = "en"
+multilingual = false
+src = "src"
+title = "1Money Interoperability"

@@ -20,6 +20,8 @@ library OMInteropStorage {
         mapping(address => OMInteropTypes.TokenBinding) tokensByOm;
         mapping(address => OMInteropTypes.TokenBinding) tokensBySidechain;
         mapping(address => uint64) latestBbNonce;
+        mapping(bytes32 => uint64) checkpointIdsBySourceHash;
+        mapping(bytes32 => bool) processedBridges;
         mapping(uint64 => OMInteropTypes.CheckpointTally) checkpointTallies;
         mapping(address => OMInteropTypes.RateLimitParam) rateLimitsParam;
         mapping(address => OMInteropTypes.RateLimitData) rateLimitsData;

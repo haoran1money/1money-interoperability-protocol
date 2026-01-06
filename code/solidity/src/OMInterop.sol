@@ -30,7 +30,7 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
     error CheckpointCompletedAndPruned(uint64 checkpointId);
     error InvalidChainId();
     error CheckpointCompleted(uint64 checkpointId);
-    error NoCompletedCheckpoint();
+    error CheckpointAlreadyRegistered(uint64 checkpointId);
     error InboundNonceUnavailable();
     error UnknownInteropProto(InteropProtocol interopProtoId);
     error RateLimitExceeded();
@@ -75,6 +75,10 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         s.operator = operator_;
         s.relayer = relayer_;
         s.priceOracle = priceOracle_;
+
+        // IMPORTANT: Checkpoint 0 will not have any user transactions,
+        // so we initialize earliestIncompletedCheckpoint to 1
+        s.earliestIncompletedCheckpoint = 1;
 
         emit OperatorUpdated(operator_);
         emit RelayerUpdated(relayer_);
@@ -244,7 +248,7 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
     }
 
     /// @inheritdoc IOMInterop
-    function updateCheckpointInfo(uint64 checkpointId, uint32 burnAndBridgeCount)
+    function updateCheckpointInfo(uint64 checkpointId, bytes32[] calldata burnAndBridgeHashes)
         external
         override
         onlyRelayer
@@ -253,7 +257,26 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         OMInteropTypes.CheckpointTally storage tally = s.checkpointTallies[checkpointId];
 
-        tally.certified = burnAndBridgeCount;
+        // Ensure checkpoint is not already fully registered
+        if (tally.certified != 0 && tally.completed >= tally.certified) {
+            revert CheckpointAlreadyRegistered(checkpointId);
+        }
+
+        // Iterate through all provided burnAndBridge hashes
+        for (uint256 i = 0; i < burnAndBridgeHashes.length; i++) {
+            bytes32 burnAndBridgeHash = burnAndBridgeHashes[i];
+
+            // Ensure transaction hash is only recorded once
+            if (s.checkpointIdsBySourceHash[burnAndBridgeHash] == 0) {
+                s.checkpointIdsBySourceHash[burnAndBridgeHash] = checkpointId;
+                tally.certified += 1;
+
+                // If the transaction was already processed, count it as completed
+                if (s.processedBridges[burnAndBridgeHash]) {
+                    tally.completed += 1;
+                }
+            }
+        }
 
         _tryPruneCheckpoint(checkpointId);
     }
@@ -262,11 +285,10 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
     function getLatestCompletedCheckpoint() external view override returns (uint64 checkpointId) {
         OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         checkpointId = s.earliestIncompletedCheckpoint;
+
+        // Avoid underflow
         if (checkpointId == 0) {
-            if (s.checkpointTallies[0].certified != 0) {
-                return 0;
-            }
-            revert NoCompletedCheckpoint();
+            return 0;
         }
 
         unchecked {
@@ -440,28 +462,31 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
         OMInteropTypes.TokenBinding storage binding = s.tokensByOm[req.omToken];
         uint256 refundAmount = _dispatchBridge(binding, req);
 
-        _recordCheckpointProgress(req.checkpointId);
+        _recordProcessedBridge(req.sourceHash, req.checkpointId);
 
         emit OMInteropSent(
             _latestInboundNonceInternal(), req.from, refundAmount, req.omToken, req.dstChainId, req.sourceHash
         );
     }
 
-    function _recordCheckpointProgress(uint64 checkpointId) internal {
+    function _recordProcessedBridge(bytes32 sourceHash, uint64 checkpointId) internal {
         OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         OMInteropTypes.CheckpointTally storage tally = s.checkpointTallies[checkpointId];
-        tally.completed += 1;
-        _tryPruneCheckpoint(checkpointId);
+
+        s.processedBridges[sourceHash] = true;
+
+        // If the checkpoint is known when recording the processed bridge, update the completed count
+        if (checkpointId > 0) {
+            s.checkpointIdsBySourceHash[sourceHash] = checkpointId;
+            tally.completed += 1;
+            _tryPruneCheckpoint(checkpointId);
+        }
     }
 
     function _tryPruneCheckpoint(uint64 checkpointId) internal {
         OMInteropStorage.Layout storage s = OMInteropStorage.layout();
         if (!_isCheckpointComplete(checkpointId)) {
             return;
-        }
-
-        if (s.earliestIncompletedCheckpoint == 0 && s.checkpointTallies[0].certified == 0 && checkpointId != 0) {
-            s.earliestIncompletedCheckpoint = checkpointId;
         }
 
         while (_isCheckpointComplete(s.earliestIncompletedCheckpoint)) {
@@ -481,7 +506,7 @@ contract OMInterop is OwnableUpgradeable, LZInterop, UUPSUpgradeable, IOMInterop
 
     function _ensureCheckpointNotCompleted(uint64 checkpointId) internal view {
         OMInteropStorage.Layout storage s = OMInteropStorage.layout();
-        if (checkpointId < s.earliestIncompletedCheckpoint) {
+        if (checkpointId != 0 && checkpointId < s.earliestIncompletedCheckpoint) {
             revert CheckpointCompletedAndPruned(checkpointId);
         }
     }

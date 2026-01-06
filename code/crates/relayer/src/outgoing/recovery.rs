@@ -4,7 +4,7 @@ use alloy_primitives::FixedBytes;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
 use alloy_sol_types::SolEvent;
-use onemoney_interop::contract::OMInterop::{self, OMInteropErrors, OMInteropSent};
+use onemoney_interop::contract::OMInterop::{self, OMInteropSent};
 use onemoney_interop::contract::TxHashMapping;
 use onemoney_protocol::{CheckpointTransactions, Client, TxPayload};
 use tracing::warn;
@@ -20,16 +20,8 @@ pub async fn get_earliest_incomplete_checkpoint_number(config: &Config) -> Resul
         .connect_http(config.side_chain_http_url.clone());
     let contract = OMInterop::new(config.interop_contract_address, provider);
 
-    let res = contract.getLatestCompletedCheckpoint().call().await;
-
-    match res {
-        Ok(n) => Ok(n + 1),
-        Err(e) => match e.try_decode_into_interface_error::<OMInteropErrors>() {
-            Ok(OMInteropErrors::NoCompletedCheckpoint(_)) => Ok(0),
-            Ok(other) => Err(Error::ContractReverted(other)),
-            Err(e) => Err(e.into()),
-        },
-    }
+    let res = contract.getLatestCompletedCheckpoint().call().await?;
+    Ok(res)
 }
 
 pub async fn recover_incomplete_withdrawals_hash_mapping(

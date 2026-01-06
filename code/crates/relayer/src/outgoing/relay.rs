@@ -1,6 +1,6 @@
 use core::sync::atomic::Ordering;
 
-use alloy_primitives::Bytes;
+use alloy_primitives::{Bytes, FixedBytes};
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::{OMInterop, TxHashMapping};
 use onemoney_protocol::{Client, Transaction, TxPayload};
@@ -13,7 +13,7 @@ pub async fn process_checkpoint_info(
     config: &Config,
     relayer_nonce: RelayerNonce,
     current_checkpoint_id: u64,
-    transaction_count: u32,
+    transaction_hashes: Vec<FixedBytes<32>>,
 ) -> Result<(), Error> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
@@ -22,7 +22,7 @@ pub async fn process_checkpoint_info(
     let contract = OMInterop::new(config.interop_contract_address, provider);
 
     let tx_receipt = contract
-        .updateCheckpointInfo(current_checkpoint_id, transaction_count)
+        .updateCheckpointInfo(current_checkpoint_id, transaction_hashes)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
         .await

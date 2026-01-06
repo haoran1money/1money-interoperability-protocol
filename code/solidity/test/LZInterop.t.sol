@@ -190,9 +190,10 @@ contract LZInteropTest is TestHelperOz5 {
 
     function testSidechainDeliversToRemoteOftRecipient() public {
         uint64 checkpointId = 7;
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](1);
 
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 1);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes);
 
         address remoteRecipient = address(0xCAFEBABE);
         uint256 amountToSend = BRIDGE_AMOUNT;

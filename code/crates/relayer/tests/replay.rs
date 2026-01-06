@@ -261,6 +261,12 @@ async fn cross_chain_replay_flow_is_enforced(
         fetch_balance(&onemoney_client, relayer_address, token_address).await?;
     let user_balance_before_refund =
         fetch_balance(&onemoney_client, user_address, token_address).await?;
+
+    let nonce = onemoney_client
+        .get_account_nonce(relayer_address)
+        .await?
+        .nonce;
+
     let payment_payload = PaymentPayload {
         chain_id,
         nonce,

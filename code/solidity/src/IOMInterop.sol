@@ -90,8 +90,8 @@ interface IOMInterop {
 
     /// @notice Updates the contract with the number of certified BurnAndBridge instructions in a checkpoint.
     /// @param checkpointId Identifier of the payment-network checkpoint.
-    /// @param burnAndBridgeCount Count of certified BurnAndBridge transactions included in the checkpoint.
-    function updateCheckpointInfo(uint64 checkpointId, uint32 burnAndBridgeCount) external;
+    /// @param burnAndBridgeHashes Hashes of the certified BurnAndBridge transactions included in the checkpoint.
+    function updateCheckpointInfo(uint64 checkpointId, bytes32[] calldata burnAndBridgeHashes) external;
 
     /// @notice Returns the latest checkpoint for which every BurnAndBridge has been completed.
     /// @dev Reverts if no checkpoint has been completed yet.

@@ -42,11 +42,13 @@ pub async fn relay_outgoing_events(
         );
         debug!(?transactions, "transactions details");
 
+        let transaction_hashes = transactions.iter().map(|tx| tx.hash).collect::<Vec<_>>();
+
         process_checkpoint_info(
             config,
             relayer_nonce.clone(),
             current_checkpoint_id,
-            transactions.len() as u32,
+            transaction_hashes,
         )
         .await?;
 

@@ -17,6 +17,8 @@ contract OMInteropTest is Test {
     address internal constant OM_TOKEN = address(0xBEEF);
 
     bytes32 internal constant BURN_AND_BRIDGE_HASH = keccak256("burnandbridgeTxHash");
+    bytes32 internal constant BURN_AND_BRIDGE_HASH_2 = keccak256("secondBurnandbridgeTxHash");
+    bytes32 internal constant BURN_AND_BRIDGE_HASH_3 = keccak256("thirdBurnandbridgeTxHash");
 
     function setUp() public {
         vm.prank(OWNER);
@@ -104,8 +106,11 @@ contract OMInteropTest is Test {
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
         uint64 checkpointId = 10;
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](1);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
+
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 1);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes);
         (uint32 certifiedBefore, uint32 completedBefore) = interop.getCheckpointTally(checkpointId);
         assertEq(certifiedBefore, 1);
         assertEq(completedBefore, 0);
@@ -116,11 +121,11 @@ contract OMInteropTest is Test {
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 0, address(0x02), 100, 111, 5, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
 
-        assertEq(interop.getLatestCompletedCheckpoint(), checkpointId, "checkpoint not closed");
+        assertEq(interop.getLatestCompletedCheckpoint(), 0, "checkpoint not closed");
         assertEq(interop.getLatestProcessedNonce(address(0x01)), 1, "processed nonce mismatch");
         (uint32 certified, uint32 completed) = interop.getCheckpointTally(checkpointId);
-        assertEq(certified, 0, "completed checkpoint should be pruned");
-        assertEq(completed, 0, "completed checkpoint should be pruned");
+        assertEq(certified, 1, "checkpoint should have 1 certified transaction");
+        assertEq(completed, 1, "checkpoint should have 1 completed transaction");
     }
 
     function testBridgeToWrongNonceReverts() public {
@@ -147,8 +152,11 @@ contract OMInteropTest is Test {
         interop.bridgeFrom(address(0x1010), 123);
         assertEq(interop.getLatestInboundNonce(), 1, "first inbound nonce incorrect");
 
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](1);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
+
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(1, 1);
+        interop.updateCheckpointInfo(1, burnAndBridgeHashes);
         vm.expectEmit(true, true, false, true, address(interop));
         emit IOMInterop.OMInteropSent(1, address(0xAAAA), 5, OM_TOKEN, 1, BURN_AND_BRIDGE_HASH);
         vm.prank(RELAYER);
@@ -162,7 +170,7 @@ contract OMInteropTest is Test {
         assertEq(interop.getLatestInboundNonce(), 3, "third inbound nonce incorrect");
 
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(2, 1);
+        interop.updateCheckpointInfo(2, burnAndBridgeHashes);
         vm.expectEmit(true, true, false, true, address(interop));
         emit IOMInterop.OMInteropSent(3, address(0xCCCC), 5, OM_TOKEN, 1, BURN_AND_BRIDGE_HASH);
         vm.prank(RELAYER);
@@ -230,7 +238,7 @@ contract OMInteropTest is Test {
     function testBridgeToUnknownTokenReverts() public {
         vm.expectRevert(abi.encodeWithSignature("UnknownToken(address)", OM_TOKEN));
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
     }
 
     function testBridgeToInputValidation() public {
@@ -239,32 +247,35 @@ contract OMInteropTest is Test {
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAddress()"));
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0), 0, address(0x02), 1, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0), 0, address(0x02), 1, 1, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAddress()"));
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 0, address(0), 1, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 0, address(0), 1, 1, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidAmount()"));
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 0, address(0x02), 0, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 0, address(0x02), 0, 1, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
 
         vm.expectRevert(abi.encodeWithSignature("InvalidChainId()"));
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 0, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 0, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
     }
 
     function testBridgeToCheckpointAlreadyCompletedReverts() public {
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 5;
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](1);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
+
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 1);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes);
 
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
 
-        vm.expectRevert(abi.encodeWithSignature("CheckpointCompletedAndPruned(uint64)", checkpointId));
+        vm.expectRevert(abi.encodeWithSignature("CheckpointCompleted(uint64)", checkpointId));
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 1, address(0x03), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
     }
@@ -273,14 +284,16 @@ contract OMInteropTest is Test {
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 11;
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](2);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
+        burnAndBridgeHashes[1] = BURN_AND_BRIDGE_HASH_2;
+
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 2);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes);
 
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
 
-        vm.expectRevert(abi.encodeWithSignature("NoCompletedCheckpoint()"));
-        interop.getLatestCompletedCheckpoint();
         (uint32 certified, uint32 completed) = interop.getCheckpointTally(checkpointId);
         assertEq(certified, 2);
         assertEq(completed, 1);
@@ -290,16 +303,18 @@ contract OMInteropTest is Test {
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 21;
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](1);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
 
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 0);
-        vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
 
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 1);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes);
 
-        assertEq(interop.getLatestCompletedCheckpoint(), checkpointId);
+        // Latest completed checkpoint should still be 0 as checkpoint 21 is complete
+        // but previous checkpoints have not been updated yet.
+        assertEq(interop.getLatestCompletedCheckpoint(), 0);
     }
 
     function testCertifiedLowerThanCompletedDoesNotAdvanceLatest() public {
@@ -308,26 +323,24 @@ contract OMInteropTest is Test {
         uint64 checkpointId = 21;
 
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
-        vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 1, address(0x03), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
 
-        (uint32 certifiedBefore, uint32 completedBefore) = interop.getCheckpointTally(checkpointId);
-        assertEq(certifiedBefore, 0);
-        assertEq(completedBefore, 2);
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](2);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
+        burnAndBridgeHashes[1] = BURN_AND_BRIDGE_HASH_2;
 
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 1);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes);
 
         // This should advance the latest completed checkpoint once the certified count is known.
         assertEq(
             interop.getLatestCompletedCheckpoint(),
-            checkpointId,
+            0,
             "latest checkpoint should reflect completed entries once certified count is reported"
         );
         (uint32 certifiedAfter, uint32 completedAfter) = interop.getCheckpointTally(checkpointId);
-        assertEq(certifiedAfter, 0);
-        assertEq(completedAfter, 0);
+        assertEq(certifiedAfter, 2);
+        assertEq(completedAfter, 1);
     }
 
     function testUpdateCheckpointInfoAfterFinalizationReverts() public {
@@ -335,68 +348,64 @@ contract OMInteropTest is Test {
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
         uint64 checkpointId = 6;
 
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](1);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
+
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 1);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes);
         vm.prank(RELAYER);
         interop.bridgeTo(address(0xAA), 0, address(0xBB), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
 
-        vm.expectRevert(abi.encodeWithSignature("CheckpointCompletedAndPruned(uint64)", checkpointId));
+        bytes32[] memory burnAndBridgeHashes2 = new bytes32[](1);
+        burnAndBridgeHashes2[0] = BURN_AND_BRIDGE_HASH_2;
+
+        vm.expectRevert(abi.encodeWithSignature("CheckpointAlreadyRegistered(uint64)", checkpointId));
         vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 2);
+        interop.updateCheckpointInfo(checkpointId, burnAndBridgeHashes2);
     }
 
     function testCompletingGapAdvancesEarliestCheckpoint() public {
         vm.prank(OPERATOR);
         interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
 
-        // prepare checkpoints 0, 1, 2
-        vm.prank(RELAYER);
-        interop.updateCheckpointInfo(0, 1);
-        vm.prank(RELAYER);
-        interop.updateCheckpointInfo(1, 1);
-        vm.prank(RELAYER);
-        interop.updateCheckpointInfo(2, 1);
+        bytes32[] memory burnAndBridgeHashes = new bytes32[](1);
+        burnAndBridgeHashes[0] = BURN_AND_BRIDGE_HASH;
+        bytes32[] memory burnAndBridgeHashes2 = new bytes32[](1);
+        burnAndBridgeHashes2[0] = BURN_AND_BRIDGE_HASH_2;
+        bytes32[] memory burnAndBridgeHashes3 = new bytes32[](1);
+        burnAndBridgeHashes3[0] = BURN_AND_BRIDGE_HASH_3;
 
-        // complete checkpoints 1 and 2 first
+        // prepare checkpoints 1, 2, 3
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
+        interop.updateCheckpointInfo(1, burnAndBridgeHashes);
+        vm.prank(RELAYER);
+        interop.updateCheckpointInfo(2, burnAndBridgeHashes2);
+        vm.prank(RELAYER);
+        interop.updateCheckpointInfo(3, burnAndBridgeHashes3);
+
+        // complete checkpoints 2 and 3 first
+        vm.prank(RELAYER);
+        interop.bridgeTo(address(0x01), 0, address(0x02), 1, 1, 1, OM_TOKEN, 2, "", BURN_AND_BRIDGE_HASH_2);
 
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 1, address(0x02), 1, 1, 1, OM_TOKEN, 2, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 1, address(0x02), 1, 1, 1, OM_TOKEN, 3, "", BURN_AND_BRIDGE_HASH);
 
-        // Checkpoint 0 is still the earliest incomplete until we explicitly finish it.
+        // Checkpoint 1 is still the earliest incomplete until we explicitly finish it.
         assertEq(interop.getLatestCompletedCheckpoint(), 0, "latest checkpoint should still be 0");
 
-        // attempting to complete checkpoint 1 again should revert as it's already completed
-        vm.expectRevert(abi.encodeWithSignature("CheckpointCompleted(uint64)", 1));
+        // attempting to complete checkpoint 2 again should revert as it's already completed
+        vm.expectRevert(abi.encodeWithSignature("CheckpointCompleted(uint64)", 2));
+        vm.prank(RELAYER);
+        interop.bridgeTo(address(0x01), 2, address(0x02), 1, 1, 1, OM_TOKEN, 2, "", BURN_AND_BRIDGE_HASH);
+
+        // complete checkpoint 1 last, which should trigger the completion of 2 and 3
         vm.prank(RELAYER);
         interop.bridgeTo(address(0x01), 2, address(0x02), 1, 1, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
 
-        // complete checkpoint 0 last, which should trigger the completion of 1 and 2
+        assertEq(interop.getLatestCompletedCheckpoint(), 3, "latest checkpoint should advance to 3");
+        vm.expectRevert(abi.encodeWithSignature("CheckpointCompletedAndPruned(uint64)", 1));
         vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 2, address(0x02), 1, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
-
-        assertEq(interop.getLatestCompletedCheckpoint(), 2, "latest checkpoint should advance to 2");
-        vm.expectRevert(abi.encodeWithSignature("CheckpointCompletedAndPruned(uint64)", 0));
-        vm.prank(RELAYER);
-        interop.bridgeTo(address(0x01), 3, address(0x02), 1, 1, 1, OM_TOKEN, 0, "", BURN_AND_BRIDGE_HASH);
-    }
-
-    function testCheckpointZeroFinalizesAndLocks() public {
-        vm.prank(OPERATOR);
-        interop.mapTokenAddresses(OM_TOKEN, SIDECHAIN_TOKEN, InteropProtocol.Mock);
-        uint64 checkpointId = 0;
-
-        vm.prank(RELAYER);
-        interop.updateCheckpointInfo(checkpointId, 1);
-        vm.prank(RELAYER);
-        interop.bridgeTo(address(0xCA), 0, address(0xFE), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
-
-        assertEq(interop.getLatestCompletedCheckpoint(), checkpointId);
-
-        vm.expectRevert(abi.encodeWithSignature("CheckpointCompletedAndPruned(uint64)", checkpointId));
-        vm.prank(RELAYER);
-        interop.bridgeTo(address(0xCA), 1, address(0xFE), 1, 1, 1, OM_TOKEN, checkpointId, "", BURN_AND_BRIDGE_HASH);
+        interop.bridgeTo(address(0x01), 3, address(0x02), 1, 1, 1, OM_TOKEN, 1, "", BURN_AND_BRIDGE_HASH);
     }
 
     function testRateLimitExceeded() public {

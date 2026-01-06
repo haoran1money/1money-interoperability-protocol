@@ -16,6 +16,9 @@ pub struct Config {
     /// URL of the 1Money node to connect to
     #[arg(long, env = "OM_NODE_URL", default_value = "http://127.0.0.1:18555")]
     pub one_money_node_url: Url,
+    /// URL of the 1Money Websocket to connect to
+    #[arg(long, env = "OM_WS_URL", default_value = "ws://127.0.0.1:18555")]
+    pub one_money_ws_url: Url,
     /// HTTP URL of the sidechain node to connect to
     #[arg(long, env = "SC_HTTP_URL", default_value = "http://127.0.0.1:8645")]
     pub side_chain_http_url: Url,

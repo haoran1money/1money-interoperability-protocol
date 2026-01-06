@@ -3396,6 +3396,7 @@ dependencies = [
  "test-log",
  "thiserror",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
  "tracing-subscriber",
  "url",

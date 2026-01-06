@@ -49,11 +49,7 @@ where
 }
 
 /// Starts a relayer task, runs `work`, and handles whichever finishes first.
-pub async fn spawn_relayer_and<F, Fut>(
-    config: Config,
-    poll_interval: Duration,
-    work: F,
-) -> Result<()>
+pub async fn spawn_relayer_and<F, Fut>(config: Config, work: F) -> Result<()>
 where
     F: FnOnce() -> Fut,
     Fut: Future<Output = Result<()>>,
@@ -86,9 +82,7 @@ where
                 .await?;
             let start_checkpoint = get_earliest_incomplete_checkpoint_number(&config).await?;
             info!(start_checkpoint = %start_checkpoint, "Will start outgoing relayer task");
-            let relayer_result =
-                relay_outgoing_events(&config, relayer_nonce, start_checkpoint, poll_interval)
-                    .await;
+            let relayer_result = relay_outgoing_events(&config, relayer_nonce).await;
             if let Err(err) = &relayer_result {
                 warn!(%err, "relayer 1Money event loop ended");
             }

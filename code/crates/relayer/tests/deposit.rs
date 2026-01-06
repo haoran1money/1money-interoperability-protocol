@@ -5,7 +5,7 @@ use core::time::Duration;
 use alloy_primitives::U256;
 use alloy_provider::ProviderBuilder;
 use alloy_signer_local::PrivateKeySigner;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Result};
 use onemoney_interop::contract::{OMInterop, TxHashMapping};
 use relayer::config::Config;
 use relayer::outgoing::stream::relay_outgoing_events;
@@ -42,8 +42,18 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
         .wallet(sc_token_wallet.clone())
         .connect_http(http_endpoint.clone());
 
+    let one_money_node_url = onemoney_client.base_url();
+    let mut one_money_ws_url = onemoney_client.base_url().clone();
+    one_money_ws_url.set_scheme("ws").map_err(|_| {
+        eyre!(
+            "Failed to set `ws` scheme for 1Money URL `{}`",
+            onemoney_client.base_url()
+        )
+    })?;
+
     let config = Config {
-        one_money_node_url: onemoney_client.base_url().clone(),
+        one_money_node_url: one_money_node_url.clone(),
+        one_money_ws_url: one_money_ws_url.clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: ws_endpoint.clone(),
         interop_contract_address: interop_contract_addr,
@@ -51,7 +61,7 @@ async fn ominterop_deposit_flow(#[future] e2e_test_context: E2ETestContext) -> R
         tx_mapping_contract_address: tx_mapping_contract_addr,
     };
 
-    spawn_relayer_and(config, Duration::from_secs(1), || {
+    spawn_relayer_and(config, || {
         let deposit_amount = U256::from(500u64);
         let recipient = anvil.addresses()[6];
         let sc_token_contract = OMInterop::new(interop_contract_addr, sc_token_provider.clone());
@@ -155,8 +165,18 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
         .wallet(sc_token_wallet.clone())
         .connect_http(http_endpoint.clone());
 
+    let one_money_node_url = onemoney_client.base_url();
+    let mut one_money_ws_url = onemoney_client.base_url().clone();
+    one_money_ws_url.set_scheme("ws").map_err(|_| {
+        eyre!(
+            "Failed to set `ws` scheme for 1Money URL `{}`",
+            onemoney_client.base_url()
+        )
+    })?;
+
     let config = Config {
-        one_money_node_url: onemoney_client.base_url().clone(),
+        one_money_node_url: one_money_node_url.clone(),
+        one_money_ws_url: one_money_ws_url.clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: anvil.ws_endpoint_url(),
         interop_contract_address: interop_contract_addr,
@@ -227,9 +247,7 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
 
     let handler = {
         let config_owned = config.clone();
-        tokio::spawn(async move {
-            relay_outgoing_events(&config_owned, relayer_nonce, 0, Duration::from_secs(1)).await
-        })
+        tokio::spawn(async move { relay_outgoing_events(&config_owned, relayer_nonce).await })
     };
 
     // Wait for BurnAndBridge to be processed
@@ -284,7 +302,7 @@ async fn clear_ominterop_deposit(#[future] e2e_test_context: E2ETestContext) -> 
 
     let expected_balance = initial_recipient_balance + deposit_amount;
 
-    spawn_relayer_and(config.clone(), Duration::from_secs(1), || async move {
+    spawn_relayer_and(config.clone(), || async move {
         let target_balance =
             wait_for_eventual_balance(&onemoney_client, recipient, token_address, expected_balance)
                 .await?;

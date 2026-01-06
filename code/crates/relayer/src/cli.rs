@@ -193,13 +193,7 @@ impl Cli {
                     to = %config.side_chain_http_url,
                     "Relaying 1Money events",
                 );
-                relay_outgoing_events(
-                    &config,
-                    sidechain_relayer_nonce,
-                    start_checkpoint,
-                    poll_interval,
-                )
-                .await?;
+                relay_outgoing_events(&config, sidechain_relayer_nonce).await?;
             }
             Commands::All {
                 poa_poll_interval,
@@ -248,13 +242,7 @@ impl Cli {
                         .map_err(CliError::from),
                     relay_incoming_events(&config, sidechain_relayer_nonce.clone(), from_block)
                         .map_err(CliError::from),
-                    relay_outgoing_events(
-                        &config,
-                        sidechain_relayer_nonce,
-                        start_checkpoint,
-                        one_money_poll_interval,
-                    )
-                    .map_err(CliError::from),
+                    relay_outgoing_events(&config, sidechain_relayer_nonce).map_err(CliError::from),
                 )
                 .await?;
             }

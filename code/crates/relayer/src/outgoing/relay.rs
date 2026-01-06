@@ -1,9 +1,9 @@
 use core::sync::atomic::Ordering;
 
-use alloy_primitives::{Bytes, FixedBytes};
+use alloy_primitives::{Bytes, FixedBytes, B256};
 use alloy_provider::ProviderBuilder;
 use onemoney_interop::contract::{OMInterop, TxHashMapping};
-use onemoney_protocol::{Client, Transaction, TxPayload};
+use onemoney_protocol::{Client, TxPayload};
 use tracing::{debug, warn};
 
 use crate::config::{Config, RelayerNonce};
@@ -48,7 +48,9 @@ pub async fn process_checkpoint_info(
 pub async fn process_burn_and_bridge_transactions(
     config: &Config,
     relayer_nonce: RelayerNonce,
-    tx: Transaction,
+    tx_data: TxPayload,
+    tx_hash: B256,
+    checkpoint_number: u64,
 ) -> Result<(), Error> {
     let provider = ProviderBuilder::new()
         .wallet(config.relayer_private_key.clone())
@@ -68,17 +70,17 @@ pub async fn process_burn_and_bridge_transactions(
         escrow_fee,
         bridge_metadata: _,
         token,
-    } = tx.data
+    } = tx_data
     else {
         return Err(Error::Generic(
             "Expected TokenBurnAndBridge transaction".to_string(),
         ));
     };
 
-    debug!(burnAndBridgeHas = %tx.hash, "Will register withdrawal transaction hash");
+    debug!(burnAndBridgeHas = %tx_hash, "Will register withdrawal transaction hash");
 
     match mapping_contract
-        .registerWithdrawal(tx.hash)
+        .registerWithdrawal(tx_hash)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
         .await
@@ -92,7 +94,7 @@ pub async fn process_burn_and_bridge_transactions(
         Ok(pending_tx) => {
             if let Err(e) = pending_tx.get_receipt().await {
                 warn!(
-                    %tx.hash,
+                    %tx_hash,
                     error = %e,
                     "Failed to retrieve withdrawal transaction hash link receipt"
                 );
@@ -102,17 +104,15 @@ pub async fn process_burn_and_bridge_transactions(
             // If send failed, decrement the nonce
             relayer_nonce.fetch_sub(1, Ordering::SeqCst);
             warn!(
-                %tx.hash,
+                %tx_hash,
                 error = %e,
                 "Failed to register withdrawal transaction hash"
             );
         }
     }
 
-    let checkpoint_number = tx.checkpoint_number.ok_or(Error::MissingCheckpointNumber)?;
-
     let burn_and_bridge_receipt = client
-        .get_transaction_receipt_by_hash(&tx.hash.to_string())
+        .get_transaction_receipt_by_hash(&tx_hash.to_string())
         .await?;
 
     // The bbnonce in the BurnAndBridge receipt is the account's next nonce,
@@ -121,15 +121,13 @@ pub async fn process_burn_and_bridge_transactions(
         .success_info
         .ok_or_else(|| {
             Error::Generic(format!(
-                "missing `success_info` in BurnAndBridge receipt for transaction `{}`",
-                tx.hash
+                "missing `success_info` in BurnAndBridge receipt for transaction `{tx_hash}`"
             ))
         })?
         .bridge_info
         .ok_or_else(|| {
             Error::Generic(format!(
-                "missing `bridge_info` in BurnAndBridge receipt for transaction `{}`",
-                tx.hash
+                "missing `bridge_info` in BurnAndBridge receipt for transaction `{tx_hash}`"
             ))
         })?
         .bbnonce
@@ -142,7 +140,7 @@ pub async fn process_burn_and_bridge_transactions(
     let latest_bb = contract.getLatestProcessedNonce(sender).call().await?;
 
     if latest_bb > bbnonce {
-        warn!(burn_and_bridge_hash=%tx.hash, "Skipping BurnAndBridge as it was already processed");
+        warn!(burn_and_bridge_hash=%tx_hash, "Skipping BurnAndBridge as it was already processed");
         return Ok(());
     }
 
@@ -157,7 +155,7 @@ pub async fn process_burn_and_bridge_transactions(
             token,
             checkpoint_number,
             bridge_data,
-            tx.hash,
+            tx_hash,
         )
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
@@ -173,10 +171,10 @@ pub async fn process_burn_and_bridge_transactions(
 
     debug!(?tx_receipt, "Tx receipt for bridge to");
 
-    debug!(burnAndBridgeHas = %tx.hash, bridgeToHash = %tx_receipt.transaction_hash, "Will link withdrawal transaction hash");
+    debug!(burnAndBridgeHas = %tx_hash, bridgeToHash = %tx_receipt.transaction_hash, "Will link withdrawal transaction hash");
 
     match mapping_contract
-        .linkWithdrawalHashes(tx.hash, tx_receipt.transaction_hash)
+        .linkWithdrawalHashes(tx_hash, tx_receipt.transaction_hash)
         .nonce(relayer_nonce.fetch_add(1, Ordering::SeqCst))
         .send()
         .await
@@ -190,7 +188,7 @@ pub async fn process_burn_and_bridge_transactions(
         Ok(pending_tx) => {
             if let Err(e) = pending_tx.get_receipt().await {
                 warn!(
-                    burn_and_bridge_hash=%tx.hash,
+                    burn_and_bridge_hash=%tx_hash,
                     bridge_to_hash=%tx_receipt.transaction_hash,
                     error = %e,
                     "Failed to retrieve `linkWithdrawalHashes` receipt"
@@ -201,7 +199,7 @@ pub async fn process_burn_and_bridge_transactions(
             // If send failed, decrement the nonce
             relayer_nonce.fetch_sub(1, Ordering::SeqCst);
             warn!(
-                    burn_and_bridge_hash=%tx.hash,
+                    burn_and_bridge_hash=%tx_hash,
                     bridge_to_hash=%tx_receipt.transaction_hash,
                 error = %e,
                 "Failed to link withdrawal hashes"

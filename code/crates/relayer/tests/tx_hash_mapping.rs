@@ -47,8 +47,18 @@ async fn recover_incomplete_deposits(#[future] e2e_test_context: E2ETestContext)
         .connect_http(http_endpoint.clone());
     let sc_token_contract = OMInterop::new(interop_contract_addr, sc_token_provider.clone());
 
+    let one_money_node_url = onemoney_client.base_url();
+    let mut one_money_ws_url = onemoney_client.base_url().clone();
+    one_money_ws_url.set_scheme("ws").map_err(|_| {
+        eyre!(
+            "Failed to set `ws` scheme for 1Money URL `{}`",
+            onemoney_client.base_url()
+        )
+    })?;
+
     let config = Config {
-        one_money_node_url: onemoney_client.base_url().clone(),
+        one_money_node_url: one_money_node_url.clone(),
+        one_money_ws_url: one_money_ws_url.clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: anvil.ws_endpoint_url(),
         interop_contract_address: interop_contract_addr,
@@ -190,7 +200,7 @@ async fn recover_incomplete_deposits(#[future] e2e_test_context: E2ETestContext)
     tokio::time::sleep(core::time::Duration::from_secs(5)).await;
 
     // Start the relayer and assert the transaction hashes are eventually mapped
-    spawn_relayer_and(config.clone(), Duration::from_secs(1), || async move {
+    spawn_relayer_and(config.clone(), || async move {
         info!("Will assert there are no pending deposits which need to be mapped");
         tokio::time::timeout(core::time::Duration::from_secs(20), async {
             loop {
@@ -283,8 +293,18 @@ async fn recover_incomplete_withdrawals(#[future] e2e_test_context: E2ETestConte
         .mint_token(relayer_addr, U256::from(10000000), token_address)
         .await?;
 
+    let one_money_node_url = onemoney_client.base_url();
+    let mut one_money_ws_url = onemoney_client.base_url().clone();
+    one_money_ws_url.set_scheme("ws").map_err(|_| {
+        eyre!(
+            "Failed to set `ws` scheme for 1Money URL `{}`",
+            onemoney_client.base_url()
+        )
+    })?;
+
     let config = Config {
-        one_money_node_url: onemoney_client.base_url().clone(),
+        one_money_node_url: one_money_node_url.clone(),
+        one_money_ws_url: one_money_ws_url.clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: anvil.ws_endpoint_url(),
         interop_contract_address: interop_contract_addr,
@@ -558,7 +578,7 @@ async fn recover_incomplete_withdrawals(#[future] e2e_test_context: E2ETestConte
         "Expected 2 incomplete refund hash mappings"
     );
 
-    spawn_relayer_and(config.clone(), Duration::from_secs(1), || async move {
+    spawn_relayer_and(config.clone(), || async move {
         info!("Will assert there are no pending withdrawals which need to be mapped");
         tokio::time::timeout(core::time::Duration::from_secs(20), async {
             loop {

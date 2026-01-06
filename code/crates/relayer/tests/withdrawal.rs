@@ -7,7 +7,7 @@ use alloy_primitives::U256;
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_signer_local::PrivateKeySigner;
 use alloy_sol_types::SolEvent;
-use color_eyre::eyre::Result;
+use color_eyre::eyre::{eyre, Result};
 use onemoney_interop::contract::OMInterop::OMInteropSent;
 use onemoney_interop::contract::{OMInterop, TxHashMapping};
 use onemoney_protocol::{Client, PaymentPayload};
@@ -66,8 +66,18 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
         .wallet(sc_token_wallet.clone())
         .connect_http(http_endpoint.clone());
 
+    let one_money_node_url = onemoney_client.base_url();
+    let mut one_money_ws_url = onemoney_client.base_url().clone();
+    one_money_ws_url.set_scheme("ws").map_err(|_| {
+        eyre!(
+            "Failed to set `ws` scheme for 1Money URL `{}`",
+            onemoney_client.base_url()
+        )
+    })?;
+
     let config = Config {
-        one_money_node_url: onemoney_client.base_url().clone(),
+        one_money_node_url: one_money_node_url.clone(),
+        one_money_ws_url: one_money_ws_url.clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: ws_endpoint.clone(),
         interop_contract_address: interop_contract_addr,
@@ -80,7 +90,7 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
         .connect_http(http_endpoint.clone());
     let relayer_contract = OMInterop::new(interop_contract_addr, relayer_provider.clone());
 
-    spawn_relayer_and(config.clone(), Duration::from_secs(1), || {
+    spawn_relayer_and(config.clone(), || {
         let transfer_amount_1 = U256::from(500u64);
         let transfer_amount_2 = U256::from(400u64);
         let withdrawal_amount_1 = U256::from(10);
@@ -148,6 +158,8 @@ async fn test_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Result<(
             // First withdrawal
             let balance_before_tx = fetch_balance(&onemoney_client, sender, token_address).await?;
             let bbnonce_before_tx = onemoney_client.get_account_bbonce(sender).await?;
+
+            info!("Will trigger first BurnAndBridge");
 
             let first_tx_response = burn_and_bridge(
                 client_url.clone(),
@@ -412,8 +424,18 @@ async fn test_clear_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Re
         .mint_token(relayer_addr, U256::from(10000000), token_address)
         .await?;
 
+    let one_money_node_url = onemoney_client.base_url();
+    let mut one_money_ws_url = onemoney_client.base_url().clone();
+    one_money_ws_url.set_scheme("ws").map_err(|_| {
+        eyre!(
+            "Failed to set `ws` scheme for 1Money URL `{}`",
+            onemoney_client.base_url()
+        )
+    })?;
+
     let config = Config {
-        one_money_node_url: onemoney_client.base_url().clone(),
+        one_money_node_url: one_money_node_url.clone(),
+        one_money_ws_url: one_money_ws_url.clone(),
         side_chain_http_url: http_endpoint.clone(),
         side_chain_ws_url: anvil.ws_endpoint_url(),
         interop_contract_address: interop_contract_addr,
@@ -500,7 +522,7 @@ async fn test_clear_withdrawal(#[future] e2e_test_context: E2ETestContext) -> Re
     // Wait a bit to assert balance is unchanged
     tokio::time::sleep(Duration::from_secs(5)).await;
 
-    spawn_relayer_and(config.clone(), Duration::from_secs(1), || {
+    spawn_relayer_and(config.clone(), || {
         async move {
             info!(
                 ?sender,

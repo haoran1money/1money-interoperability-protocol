@@ -4,12 +4,13 @@ use core::time::Duration;
 use relayer::config::Config;
 use relayer::incoming::recovery::{
     get_latest_incomplete_block_number, recover_incomplete_deposit_hash_mapping,
+    relay_incoming_events_from_blocks,
 };
 use relayer::incoming::relay_incoming_events;
 use relayer::outgoing::recovery::{
     get_earliest_incomplete_checkpoint_number, recover_incomplete_withdrawals_hash_mapping,
 };
-use relayer::outgoing::stream::relay_outgoing_events;
+use relayer::outgoing::stream::{relay_outgoing_events, relay_outgoing_events_from_checkpoints};
 use tracing::{debug, error, info, warn};
 
 pub mod account;
@@ -72,21 +73,54 @@ where
             relayer_result
         }
     });
-    let relayer_nonce = relayer_nonce.clone();
+    let clear_task = tokio::spawn({
+        let config_clone = config.clone();
+        let relayer_nonce_clone = relayer_nonce.clone();
+        async move {
+            relay_incoming_events_from_blocks(
+                0,
+                &config_clone,
+                relayer_nonce_clone.clone(),
+                Duration::from_secs(10),
+            )
+            .await
+        }
+    });
 
     let mut relayer_outgoing_task = tokio::spawn({
-        let config = config.clone();
+        let config_clone = config.clone();
+        let relayer_nonce_clone = relayer_nonce.clone();
         async move {
             // Start Tx Hash Mapping recovery from checkpoint 0
-            recover_incomplete_withdrawals_hash_mapping(&config, relayer_nonce.clone(), None, None)
-                .await?;
-            let start_checkpoint = get_earliest_incomplete_checkpoint_number(&config).await?;
+            recover_incomplete_withdrawals_hash_mapping(
+                &config_clone,
+                relayer_nonce_clone.clone(),
+                None,
+                None,
+            )
+            .await?;
+            let start_checkpoint = get_earliest_incomplete_checkpoint_number(&config_clone).await?;
             info!(start_checkpoint = %start_checkpoint, "Will start outgoing relayer task");
-            let relayer_result = relay_outgoing_events(&config, relayer_nonce).await;
+            let relayer_result =
+                relay_outgoing_events(&config_clone, relayer_nonce_clone.clone()).await;
             if let Err(err) = &relayer_result {
                 warn!(%err, "relayer 1Money event loop ended");
             }
             relayer_result
+        }
+    });
+
+    let relayer_outgoing_clearing_task = tokio::spawn({
+        let relayer_nonce_clone = relayer_nonce.clone();
+        async move {
+            let start_checkpoint = get_earliest_incomplete_checkpoint_number(&config).await?;
+            relay_outgoing_events_from_checkpoints(
+                &config,
+                relayer_nonce_clone.clone(),
+                start_checkpoint,
+                Duration::from_secs(1),
+            )
+            .await
         }
     });
 
@@ -98,6 +132,8 @@ where
             outcome?;
             relayer_incoming_task.abort();
             relayer_outgoing_task.abort();
+            clear_task.abort();
+            relayer_outgoing_clearing_task.abort();
             match (relayer_incoming_task.await, relayer_outgoing_task.await) {
                 (Ok(Ok(())), Ok(Ok(()))) => Ok(()),
                 (Err(join_err), Ok(Ok(()))) if join_err.is_cancelled() => {

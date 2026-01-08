@@ -1,15 +1,21 @@
 use core::sync::atomic::Ordering;
+use core::time::Duration;
 
 use alloy_primitives::TxHash;
 use alloy_provider::{Provider, ProviderBuilder};
+use alloy_rpc_types_eth::Filter;
 use alloy_sol_types::SolEvent;
 use onemoney_interop::contract::OMInterop::{self, OMInteropErrors, OMInteropReceived};
 use onemoney_interop::contract::TxHashMapping;
+use onemoney_interop::event::decode_event;
 use onemoney_protocol::{CheckpointTransactions, Client, TxPayload};
 use tracing::warn;
 
 use crate::config::{Config, RelayerNonce};
 use crate::incoming::error::Error;
+use crate::incoming::process_event;
+
+const MAX_BLOCK_RANGE: u64 = 100_000;
 
 pub async fn get_latest_incomplete_block_number(config: &Config) -> Result<u64, Error> {
     let provider = ProviderBuilder::new()
@@ -73,6 +79,77 @@ async fn sc_inbound_nonce_at<P: Provider>(
             Err(e) => Err(e.into()),
         },
     }
+}
+
+pub async fn relay_incoming_events_from_blocks(
+    from_block: u64,
+    config: &Config,
+    relayer_nonce: RelayerNonce,
+    interval: Duration,
+) -> Result<(), Error> {
+    let provider = ProviderBuilder::new()
+        .wallet(config.relayer_private_key.clone())
+        .connect_http(config.side_chain_http_url.clone());
+
+    let mut from_block = from_block;
+    let mut to_block = provider.get_block_number().await?;
+
+    loop {
+        // Trigger transaction clearing
+        interval_clearing(from_block, to_block, config, relayer_nonce.clone()).await?;
+
+        // Set next clearing start to current end
+        from_block = to_block;
+
+        tokio::time::sleep(interval).await;
+
+        // Update to_block to the latest block number
+        to_block = provider.get_block_number().await?;
+    }
+}
+
+/// Recover events by querying historical logs from the sidechain in the given block range.
+pub async fn interval_clearing(
+    from_block: u64,
+    to_block: u64,
+    config: &Config,
+    relayer_nonce: RelayerNonce,
+) -> Result<(), Error> {
+    let http_provider = ProviderBuilder::new().connect_http(config.side_chain_http_url.clone());
+
+    let mut start = from_block;
+
+    // Get chunks of 99_999 blocks to avoid error:
+    // query exceeds block range 100_000
+    while start <= to_block {
+        let end = core::cmp::min(start + MAX_BLOCK_RANGE - 1, to_block);
+
+        let history_filter = Filter::new()
+            .address(config.interop_contract_address)
+            .select(start..=end);
+
+        let historical = http_provider.get_logs(&history_filter).await?;
+
+        let mut decoded = historical
+            .into_iter()
+            .map(decode_event)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        decoded.sort_by_key(|log| {
+            (
+                log.block_number.unwrap_or(u64::MAX),
+                log.log_index.unwrap_or(u64::MAX),
+            )
+        });
+
+        for log in decoded {
+            process_event(log, config, relayer_nonce.clone()).await?;
+        }
+
+        start = end + 1;
+    }
+
+    Ok(())
 }
 
 pub async fn recover_incomplete_deposit_hash_mapping(

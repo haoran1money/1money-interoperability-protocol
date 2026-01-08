@@ -7,6 +7,7 @@ use alloy_signer_local::PrivateKeySigner;
 use onemoney_interop::contract::OMInterop::{OMInteropReceived, OMInteropSent};
 use onemoney_interop::contract::TxHashMapping;
 use onemoney_protocol::client::http::Client;
+use onemoney_protocol::error::Error as OnemoneyError;
 use onemoney_protocol::responses::TransactionResponse;
 use onemoney_protocol::{PaymentPayload, TokenBridgeAndMintPayload};
 use tracing::{debug, warn};
@@ -102,7 +103,7 @@ impl<'a> Relayer1MoneyContext<'a> {
             srcChainId: src_chain_id,
         }: OMInteropReceived,
         source_tx_hash: B256,
-    ) -> Result<TransactionResponse, IncomingError> {
+    ) -> Result<Option<TransactionResponse>, IncomingError> {
         let provider = ProviderBuilder::new()
             .wallet(config.relayer_private_key.clone())
             .connect_http(config.side_chain_http_url.clone());
@@ -153,10 +154,18 @@ impl<'a> Relayer1MoneyContext<'a> {
             bridge_metadata: None,
         };
 
-        let tx_response = self
+        let tx_response = match self
             .client
             .bridge_and_mint(payload, self.private_key())
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(e) if is_error_transaction_already_exists(&e) => {
+                warn!(%e, "Mint and Bridge transaction already exists on 1Money, skipping...");
+                return Ok(None);
+            }
+            Err(e) => return Err(IncomingError::Onemoney(e)),
+        };
 
         debug!(bridgeFromHash = %source_tx_hash, bridgeAndMintHash = %tx_response.hash, "Will link deposit transaction hashes");
 
@@ -194,7 +203,7 @@ impl<'a> Relayer1MoneyContext<'a> {
             }
         }
 
-        Ok(tx_response)
+        Ok(Some(tx_response))
     }
 
     pub async fn handle_om_interop_sent(
@@ -209,7 +218,7 @@ impl<'a> Relayer1MoneyContext<'a> {
             dstChainId: _dst_chain_id,
             sourceHash: source_hash,
         }: OMInteropSent,
-    ) -> Result<TransactionResponse, IncomingError> {
+    ) -> Result<Option<TransactionResponse>, IncomingError> {
         let provider = ProviderBuilder::new()
             .wallet(config.relayer_private_key.clone())
             .connect_http(config.side_chain_http_url.clone());
@@ -223,10 +232,14 @@ impl<'a> Relayer1MoneyContext<'a> {
             token: om_token,
         };
 
-        let tx_response = self
-            .client
-            .send_payment(payload, self.private_key())
-            .await?;
+        let tx_response = match self.client.send_payment(payload, self.private_key()).await {
+            Ok(response) => response,
+            Err(e) if is_error_transaction_already_exists(&e) => {
+                warn!(%e, "Payment transaction already exists on 1Money, skipping...");
+                return Ok(None);
+            }
+            Err(e) => return Err(IncomingError::Onemoney(e)),
+        };
 
         debug!(burnAndBridgeHas = %source_hash, refundHash = %tx_response.hash, "Will link refund transaction hash");
 
@@ -264,6 +277,21 @@ impl<'a> Relayer1MoneyContext<'a> {
             }
         }
 
-        Ok(tx_response)
+        Ok(Some(tx_response))
+    }
+}
+
+fn is_error_transaction_already_exists(err: &OnemoneyError) -> bool {
+    match err {
+        OnemoneyError::BusinessLogic {
+            operation: _,
+            reason,
+        } => {
+            if reason.contains("transaction already exists") {
+                return true;
+            }
+            false
+        }
+        _ => false,
     }
 }

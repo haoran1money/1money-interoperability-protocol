@@ -75,6 +75,16 @@ There are two optional flags `--start-checkpoint-hash-mapping-recovery` and `--s
 
 ### Transaction clearing
 
+#### Clear on start
+
 Upon starting, the relayer will clear pending transactions by searching for the latest completed block and latest completed checkpoint.
 
-These values can be manually set when starting the relayer by using the flags `--from-block` and `--start-checkpoint`
+These values can be manually set when starting the relayer by using the flags `--from-block` and `--start-checkpoint`.
+
+#### Clear during runtime
+
+While the relayer is running, there are two background processes that periodically verify whether all transactions have been successfully bridged.
+
+For transactions originating from the Sidechain, the `--clearing_poll_interval` for the `sidechain` command, and `--sidechain_clearing_poll_interval` for the `all` command, configure how frequently the relayer queries blocks.
+
+For transactions originating from 1Money, the `--clearing_poll_interval` for the `onemoney` command, and `--one_money_clearing_poll_interval` for the `all` command, configure how frequently the relayer queries checkpoints.

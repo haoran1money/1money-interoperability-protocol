@@ -93,7 +93,7 @@ pub async fn event_stream(
     .boxed()
 }
 
-fn decode_event(log: RpcLog) -> Result<OMInteropLog, OMInteropError> {
+pub fn decode_event(log: RpcLog) -> Result<OMInteropLog, OMInteropError> {
     let RpcLog {
         inner,
         block_hash,

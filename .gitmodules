@@ -13,3 +13,6 @@
 [submodule "code/solidity/lib/solidity-bytes-utils"]
 	path = code/solidity/lib/solidity-bytes-utils
 	url = https://github.com/GNSPS/solidity-bytes-utils
+[submodule "emerald"]
+	path = emerald
+	url = git@github.com:informalsystems/emerald
